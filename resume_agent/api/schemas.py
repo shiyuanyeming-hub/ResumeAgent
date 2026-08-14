@@ -1,11 +1,17 @@
 """Transport-only request models for the ResumeAgent API."""
 
-from typing import List
+from typing import Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from resume_agent.domain.models import CandidateProfile, CareerTarget, QualityDimension
+from resume_agent.domain.models import (
+    CandidateProfile,
+    CareerTarget,
+    Education,
+    ExperienceType,
+    QualityDimension,
+)
 
 
 class FactBaseCreateRequest(BaseModel):
@@ -58,3 +64,32 @@ class VersionStyleRequest(BaseModel):
 class VersionDraftRequest(BaseModel):
     markdown: str = Field(default="", max_length=500_000)
     html: str = Field(default="", max_length=500_000)
+
+
+class QuestionnaireAnswerRequest(BaseModel):
+    step_id: str = Field(min_length=1)
+    value: str = ""
+    values: List[str] = Field(default_factory=list)
+    extra: Dict[str, str] = Field(default_factory=dict)
+
+
+class QuestionnaireSkipRequest(BaseModel):
+    step_id: str = Field(min_length=1)
+
+
+class EducationCreateRequest(BaseModel):
+    school: str = Field(min_length=1)
+    major: str = ""
+    degree: str = ""
+    start: str = ""
+    end: Optional[str] = None
+    core_courses: List[str] = Field(default_factory=list)
+
+
+class ExperienceUpdateRequest(BaseModel):
+    organization: Optional[str] = None
+    role: Optional[str] = None
+    type: Optional[ExperienceType] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
+    linked_skills: Optional[List[str]] = None

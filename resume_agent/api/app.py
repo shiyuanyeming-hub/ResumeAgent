@@ -19,9 +19,13 @@ from resume_agent.agents.unavailable import (
 )
 from resume_agent.api.schemas import (
     AnswerRequest,
-    FactBaseCreateRequest,
+    EducationCreateRequest,
     ExperienceCreateRequest,
+    ExperienceUpdateRequest,
+    FactBaseCreateRequest,
     ProfileUpdateRequest,
+    QuestionnaireAnswerRequest,
+    QuestionnaireSkipRequest,
     SessionCreateRequest,
     UnknownRequest,
     VersionCloneRequest,
@@ -43,15 +47,22 @@ from resume_agent.application.ports import (
     QuestionWriterAgent,
     RevisionConflict,
 )
+from resume_agent.application.questionnaire import (
+    QuestionnaireEngine,
+    QuestionnaireService,
+)
 from resume_agent.application.version_service import VersionService
 from resume_agent.domain.models import (
     CareerFactBase,
+    Education,
     InterviewSession,
     ResumeVersion,
+    utc_now,
 )
 from resume_agent.domain.quality import QualityReport, evaluate_experience
 from resume_agent.infrastructure.sqlite_repositories import (
     SQLiteFactBaseRepository,
+    SQLiteQuestionnaireRepository,
     SQLiteSessionRepository,
     SQLiteStore,
     SQLiteVersionRepository,
@@ -72,6 +83,7 @@ class ServiceContainer:
     session_repository: SQLiteSessionRepository
     version_repository: SQLiteVersionRepository
     fact_bases: FactBaseService
+    questionnaires: QuestionnaireService
     interviews: InterviewService
     versions: VersionService
     rendering: ResumeRenderService
@@ -108,12 +120,19 @@ def create_app(
         capabilities = AgentCapabilityStatus.offline(
             "LLM runtime is not configured for this application instance"
         )
+    fact_base_service = FactBaseService(fact_base_repository)
+    questionnaire_service = QuestionnaireService(
+        fact_base_service,
+        SQLiteQuestionnaireRepository(store),
+        QuestionnaireEngine(),
+    )
     container = ServiceContainer(
         store=store,
         fact_base_repository=fact_base_repository,
         session_repository=session_repository,
         version_repository=version_repository,
-        fact_bases=FactBaseService(fact_base_repository),
+        fact_bases=fact_base_service,
+        questionnaires=questionnaire_service,
         interviews=InterviewService(
             fact_base_repository,
             session_repository,
@@ -135,6 +154,101 @@ def create_app(
         description="Evidence-driven multi-agent resume mentoring service",
     )
     app.state.container = container
+
+    def _current_version(fact_base_id: UUID) -> Optional[ResumeVersion]:
+        versions = container.version_repository.list(fact_base_id)
+        if not versions:
+            return None
+        for version in versions:
+            if version.is_active:
+                return version
+        return versions[-1]
+
+    @app.get("/fact-bases/{fact_base_id}/questionnaire")
+    def questionnaire_view(fact_base_id: UUID):
+        version = _current_version(fact_base_id)
+        return {
+            "sections": container.questionnaires.progress(fact_base_id, version),
+            "next": container.questionnaires.next_card(fact_base_id, version),
+        }
+
+    @app.post("/fact-bases/{fact_base_id}/questionnaire/answer")
+    def questionnaire_answer(fact_base_id: UUID, payload: QuestionnaireAnswerRequest):
+        base = container.questionnaires.answer(
+            fact_base_id,
+            payload.step_id,
+            value=payload.value,
+            values=payload.values,
+            extra=payload.extra,
+        )
+        version = _current_version(fact_base_id)
+        return {
+            "base": base,
+            "next": container.questionnaires.next_card(fact_base_id, version),
+        }
+
+    @app.post("/fact-bases/{fact_base_id}/questionnaire/skip")
+    def questionnaire_skip(fact_base_id: UUID, payload: QuestionnaireSkipRequest):
+        return {
+            "next": container.questionnaires.skip(fact_base_id, payload.step_id),
+        }
+
+    @app.post("/fact-bases/{fact_base_id}/educations", status_code=201)
+    def create_education(fact_base_id: UUID, payload: EducationCreateRequest):
+        education = Education(
+            school=payload.school,
+            major=payload.major,
+            degree=payload.degree,
+            start=payload.start,
+            end=payload.end,
+            core_courses=payload.core_courses,
+        )
+        return container.fact_bases.add_education(fact_base_id, education)
+
+    @app.patch("/fact-bases/{fact_base_id}/educations/{education_id}")
+    def update_education(
+        fact_base_id: UUID,
+        education_id: UUID,
+        payload: EducationCreateRequest,
+    ):
+        base = container.fact_bases.get(fact_base_id)
+        current = next(
+            item for item in base.educations if item.id == education_id
+        )
+        updated = Education(
+            id=education_id,
+            school=payload.school,
+            major=payload.major,
+            degree=payload.degree,
+            start=payload.start,
+            end=payload.end,
+            core_courses=payload.core_courses,
+            created_at=current.created_at,
+            updated_at=utc_now(),
+        )
+        return container.fact_bases.update_education(fact_base_id, updated)
+
+    @app.delete("/fact-bases/{fact_base_id}/educations/{education_id}")
+    def delete_education(fact_base_id: UUID, education_id: UUID):
+        return container.fact_bases.remove_education(fact_base_id, education_id)
+
+    @app.patch("/fact-bases/{fact_base_id}/experiences/{experience_id}")
+    def update_experience(
+        fact_base_id: UUID,
+        experience_id: UUID,
+        payload: ExperienceUpdateRequest,
+    ):
+        return container.fact_bases.update_experience(
+            fact_base_id,
+            experience_id,
+            organization=payload.organization,
+            role=payload.role,
+            experience_type=payload.type,
+            start=payload.start,
+            end=payload.end,
+            linked_skills=payload.linked_skills,
+        )
+
     web_directory = Path(__file__).resolve().parents[1] / "web"
     app.mount(
         "/assets",

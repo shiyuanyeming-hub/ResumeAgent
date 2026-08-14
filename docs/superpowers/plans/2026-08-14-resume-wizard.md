@@ -1104,6 +1104,9 @@ from tests.fakes import (
 )
 
 
+engine = QuestionnaireEngine()
+
+
 def make_base():
     base = CareerFactBase()
     base.target.role = "数据分析师"
@@ -1111,6 +1114,8 @@ def make_base():
     base.profile.name = "王明"
     base.profile.email = "wang@example.com"
     base.profile.phone = "13800000000"
+    base.profile.location = "东京"
+    base.profile.links = ["https://example.com"]
     return base
 
 
@@ -1179,7 +1184,7 @@ def test_engine_summary_card_reads_version_options():
     state = QuestionnaireState(fact_base_id=base.id)
     state.completed_sections = ["education", "experience"]
     version = ResumeVersion(
-        fact_base_id=base.id, name="默认版本",
+        fact_base_id=base.id, name="默认版本", base_revision=0,
         summary_options=["稳重可靠，善于协作。", "目标导向，数据驱动。"],
     )
     card = engine.next_card(base, state, version=version)
@@ -1201,6 +1206,8 @@ def test_service_answer_persists_profile_and_advances():
     questionnaire.answer(base.id, "profile:name", value="王明")
     questionnaire.answer(base.id, "profile:email", value="wang@example.com")
     questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
     card = questionnaire.next_card(base.id)
     assert card.step_id == "target:role"
     loaded = questionnaire.fact_bases.get(base.id)
@@ -1242,6 +1249,8 @@ def test_experience_choice_creates_typed_experience():
         ("target:role", "数据分析师"),
     ]:
         questionnaire.answer(base.id, step_id, value=value)
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
     questionnaire.skip(base.id, "education:add")
     card = questionnaire.next_card(base.id)
     assert card.step_id == "experience:add"
@@ -2907,6 +2916,8 @@ def test_course_options_merge_catalog_and_advisor():
     questionnaire.answer(base.id, "profile:name", value="王明")
     questionnaire.answer(base.id, "profile:email", value="wang@example.com")
     questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
     questionnaire.answer(base.id, "target:role", value="数据分析师")
     questionnaire.answer(base.id, "education:add", value="开始填写")
     questionnaire.answer(base.id, "education:new:school", value="某大学")
@@ -2959,6 +2970,8 @@ def test_skills_options_merge_linked_and_advisor():
     base.profile.name = "王明"
     base.profile.email = "wang@example.com"
     base.profile.phone = "13800000000"
+    base.profile.location = "东京"
+    base.profile.links = ["https://example.com"]
     base.educations.append(Education(school="某大学", major="统计", start="2020-09"))
     experience = base.add_experience("星河科技", "实习生")
     experience.linked_skills = ["Excel"]

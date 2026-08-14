@@ -284,3 +284,24 @@ test("questionnaire methods post the right contracts", async () => {
   assert.equal(calls[2][0], "/fact-bases/base-1/questionnaire/skip");
   assert.deepEqual(JSON.parse(calls[2][1].body), { step_id: "profile:links" });
 });
+
+
+test("summary endpoints post the right contracts", async () => {
+  const calls = [];
+  const api = createApi(async (url, init) => {
+    calls.push([url, init]);
+    return new Response(JSON.stringify({ options: ["备选一"] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+
+  await api.generateSummaryOptions("v-1");
+  await api.setVersionSummary("v-1", "备选一");
+
+  assert.equal(calls[0][0], "/versions/v-1/summary-options/generate");
+  assert.equal(calls[0][1].method, "POST");
+  assert.equal(calls[1][0], "/versions/v-1/summary");
+  assert.equal(calls[1][1].method, "PUT");
+  assert.deepEqual(JSON.parse(calls[1][1].body), { text: "备选一" });
+});

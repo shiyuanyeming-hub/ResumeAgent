@@ -638,8 +638,56 @@ function sectionNavElement() {
 function questionAreaElement() {
   const area = element("div", "question-area");
   const card = questionnaireState?.next;
-  if (card) area.append(renderQuestionCard(card));
+  if (card) {
+    area.append(renderQuestionCard(card));
+    return area;
+  }
+  const progress = questionnaireState?.progress || [];
+  if (progress.length && progress.every((item) => item.done)) {
+    const done = element("article", "question-card complete-card");
+    done.append(element(
+      "p", "question-prompt",
+      "🎉 各章节已收集完毕，可在右侧预览微调并导出 PDF 等格式。",
+    ));
+    area.append(done);
+    return area;
+  }
+  const summary = progress.find((item) => item.section === "summary");
+  if (summary && !summary.done && currentVersion) {
+    area.append(summaryGenerateCard());
+  }
   return area;
+}
+
+function summaryGenerateCard() {
+  const article = element("article", "question-card");
+  article.append(element(
+    "p", "question-prompt",
+    "最后一步：生成自我评价备选，勾选 1~2 条写入简历；措辞可在预览编辑模式中微调。",
+  ));
+  const button = element("button", "primary", "生成自我评价备选");
+  button.type = "button";
+  button.addEventListener("click", generateSummaryOptions);
+  article.append(button);
+  return article;
+}
+
+async function generateSummaryOptions() {
+  if (!currentBase || !currentVersion || sessionTransitionGate.isTransitioning()) return;
+  const versionId = currentVersion.id;
+  const baseGeneration = baseActivationGate.current();
+  try {
+    await api.generateSummaryOptions(versionId);
+    if (!baseActivationGate.isCurrent(baseGeneration)) return;
+    const loaded = await api.listVersions(currentBase.id);
+    versions = loaded;
+    currentVersion = loaded.find((item) => item.id === versionId) || currentVersion;
+    await refreshQuestionnaire();
+    renderConversation();
+  } catch (error) {
+    if (!baseActivationGate.isCurrent(baseGeneration)) return;
+    showToast(error instanceof ApiError ? error.message : "自我评价生成失败");
+  }
 }
 
 function yearMonthField(initial = "") {

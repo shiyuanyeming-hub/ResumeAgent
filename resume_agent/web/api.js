@@ -201,5 +201,13 @@ export function createApi(fetchImpl = globalThis.fetch) {
     exportUrl: (versionId, format) => (
       `/versions/${versionId}/export?format=${encodeURIComponent(format)}`
     ),
+    generateSummaryOptions: (versionId) => request(
+      `/versions/${versionId}/summary-options/generate`,
+      { method: "POST" },
+    ),
+    setVersionSummary: (versionId, text) => request(
+      `/versions/${versionId}/summary`,
+      { method: "PUT", body: JSON.stringify({ text }) },
+    ),
   };
 }

@@ -209,5 +209,9 @@ export function createApi(fetchImpl = globalThis.fetch) {
       `/versions/${versionId}/summary`,
       { method: "PUT", body: JSON.stringify({ text }) },
     ),
+    generateSnippets: (factBaseId, experienceId) => request(
+      `/fact-bases/${factBaseId}/experiences/${experienceId}/snippets/generate`,
+      { method: "POST" },
+    ),
   };
 }

@@ -305,3 +305,19 @@ test("summary endpoints post the right contracts", async () => {
   assert.equal(calls[1][1].method, "PUT");
   assert.deepEqual(JSON.parse(calls[1][1].body), { text: "备选一" });
 });
+
+
+test("generateSnippets posts to the experience snippets endpoint", async () => {
+  const calls = [];
+  const api = createApi(async (url, init) => {
+    calls.push([url, init]);
+    return new Response(JSON.stringify({ snippets: [] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+
+  await api.generateSnippets("base-1", "exp-1");
+  assert.equal(calls[0][0], "/fact-bases/base-1/experiences/exp-1/snippets/generate");
+  assert.equal(calls[0][1].method, "POST");
+});

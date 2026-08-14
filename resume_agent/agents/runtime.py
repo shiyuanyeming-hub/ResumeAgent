@@ -19,9 +19,11 @@ from resume_agent.agents.prompts import FACT_AUDIT_PROMPT, QUESTION_WRITER_PROMP
 from resume_agent.agents.specialists import (
     COURSE_RECOMMEND_PROMPT,
     SKILL_EXTRACT_PROMPT,
+    SNIPPET_WRITE_PROMPT,
     SUMMARY_OPTIONS_PROMPT,
     StructuredCourseAgent,
     StructuredSkillAgent,
+    StructuredSnippetAgent,
     StructuredSummaryAgent,
 )
 from resume_agent.agents.unavailable import AgentUnavailableError
@@ -114,6 +116,7 @@ class AgentCapabilityStatus(BaseModel):
     course_recommendation: bool = False
     skill_suggestions: bool = False
     summary_options: bool = False
+    snippet_writer: bool = False
     rendering: bool = True
     exports: list[str] = Field(default_factory=lambda: ["html", "md", "docx", "pdf"])
     framework: str = "HelloAgents"
@@ -134,6 +137,7 @@ class AgentCapabilityStatus(BaseModel):
             course_recommendation=True,
             skill_suggestions=True,
             summary_options=True,
+            snippet_writer=True,
             model=model,
         )
 
@@ -146,6 +150,7 @@ class MentorRuntime:
     course_advisor: Optional[StructuredCourseAgent] = None
     skill_advisor: Optional[StructuredSkillAgent] = None
     summary_writer: Optional[StructuredSummaryAgent] = None
+    snippet_writer: Optional[StructuredSnippetAgent] = None
 
 
 class FreshAgentRunner:
@@ -266,11 +271,20 @@ def build_mentor_runtime(
             config=_private_agent_config(framework),
         )
     )
+    snippet_runner = FreshAgentRunner(
+        lambda: framework.SimpleAgent(
+            name="经历片段润色",
+            llm=llm,
+            system_prompt=SNIPPET_WRITE_PROMPT,
+            config=_private_agent_config(framework),
+        )
+    )
     return MentorRuntime(
         fact_auditor=StructuredFactAuditAgent(audit_runner),
         question_writer=StructuredQuestionWriterAgent(question_runner),
         course_advisor=StructuredCourseAgent(course_runner),
         skill_advisor=StructuredSkillAgent(skill_runner),
         summary_writer=StructuredSummaryAgent(summary_runner),
+        snippet_writer=StructuredSnippetAgent(snippet_runner),
         capabilities=AgentCapabilityStatus.ready(settings.model),
     )

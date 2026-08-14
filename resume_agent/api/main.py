@@ -34,6 +34,7 @@ def create_default_app(environ: Optional[Mapping[str, str]] = None):
         skill_advisor=runtime.skill_advisor,
         agent_capabilities=runtime.capabilities,
         summary_agent=runtime.summary_writer,
+        snippet_agent=runtime.snippet_writer,
     )
 
 

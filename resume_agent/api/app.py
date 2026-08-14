@@ -57,6 +57,7 @@ from resume_agent.application.version_service import VersionService
 from resume_agent.domain.course_catalog import catalog_majors
 from resume_agent.domain.models import (
     CareerFactBase,
+    ConfidenceStatus,
     Education,
     InterviewSession,
     ResumeVersion,
@@ -91,6 +92,7 @@ class ServiceContainer:
     versions: VersionService
     rendering: ResumeRenderService
     summaries: SummaryService
+    snippet_agent: object
     capabilities: AgentCapabilityStatus
 
 
@@ -105,6 +107,7 @@ def create_app(
     resume_renderer: Optional[ResumeRenderer] = None,
     agent_capabilities: Optional[AgentCapabilityStatus] = None,
     summary_agent=None,
+    snippet_agent=None,
 ) -> FastAPI:
     store = SQLiteStore(Path(database_path))
     fact_base_repository = SQLiteFactBaseRepository(store)
@@ -162,6 +165,7 @@ def create_app(
             exporter,
         ),
         summaries=SummaryService(summary_agent),
+        snippet_agent=snippet_agent,
         capabilities=capabilities,
     )
     app = FastAPI(
@@ -393,6 +397,37 @@ def create_app(
     ) -> QualityReport:
         base = container.fact_bases.get(fact_base_id)
         return evaluate_experience(base.get_experience(experience_id))
+
+    @app.post("/fact-bases/{fact_base_id}/experiences/{experience_id}/snippets/generate")
+    def generate_experience_snippets(fact_base_id: UUID, experience_id: UUID):
+        base = container.fact_bases.get(fact_base_id)
+        experience = base.get_experience(experience_id)
+        facts = [
+            value
+            for values in experience.statements.values()
+            for value in values
+            if value.confidence
+            in (ConfidenceStatus.CONFIRMED, ConfidenceStatus.ESTIMATED)
+        ]
+        if not facts:
+            return {"snippets": []}
+        texts = [value.text for value in facts]
+        if container.snippet_agent is not None:
+            try:
+                generated = container.snippet_agent.write(experience, "\n".join(texts))
+                if generated:
+                    texts = generated
+            except Exception:
+                pass  # 离线/失败时退化为事实原话卡
+        return {
+            "snippets": [
+                {
+                    "text": text,
+                    "source_fact_ids": [str(value.id) for value in facts],
+                }
+                for text in texts
+            ]
+        }
 
     @app.post(
         "/sessions",

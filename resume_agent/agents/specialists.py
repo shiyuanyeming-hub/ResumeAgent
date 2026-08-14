@@ -60,3 +60,24 @@ class StructuredSummaryAgent:
         )
         payload = run_structured(self.runner, prompt, SummaryOptionsPayload)
         return [item.strip() for item in payload.options if item.strip()]
+
+
+class SnippetPayload(BaseModel):
+    snippets: List[str] = Field(min_length=1, max_length=3)
+
+
+SNIPPET_WRITE_PROMPT = """你是简历经历润色员。基于给定经历与已确认事实，改写合并为 1~3 条可直接写入简历的中文要点（每条一句话、动词开头；保留事实中的数字与原意，禁止新增数字或成果）。只输出 JSON：{"snippets": ["要点1", ...]}"""
+
+
+class StructuredSnippetAgent:
+    def __init__(self, runner) -> None:
+        self.runner = runner
+
+    def write(self, experience, facts_text: str) -> List[str]:
+        prompt = (
+            f"{SNIPPET_WRITE_PROMPT}\n"
+            f"经历：{experience.organization} · {experience.role}\n"
+            f"已确认事实：\n{facts_text}"
+        )
+        payload = run_structured(self.runner, prompt, SnippetPayload)
+        return [item.strip() for item in payload.snippets if item.strip()]

@@ -372,3 +372,9 @@ dialog p { color: var(--muted); line-height: 1.6; }
 .question-actions { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
 .year-month-range { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .year-month-fallback { display: inline-flex; gap: 4px; }
+
+.snippet-cards { margin-top: 10px; border-top: 1px dashed var(--border, #d8dde5); padding-top: 10px; }
+.snippet-cards h4 { margin: 0 0 4px; }
+.snippet-card { border: 1px solid var(--border, #d8dde5); border-radius: 8px; padding: 8px 10px; margin: 8px 0; background: #f8fafc; cursor: grab; }
+.snippet-card:hover { border-color: var(--accent, #1d4ed8); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.snippet-card p { margin: 0; }

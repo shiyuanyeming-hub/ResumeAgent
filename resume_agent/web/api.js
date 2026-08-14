@@ -213,5 +213,13 @@ export function createApi(fetchImpl = globalThis.fetch) {
       `/fact-bases/${factBaseId}/experiences/${experienceId}/snippets/generate`,
       { method: "POST" },
     ),
+    addVersionSnippet: (versionId, payload) => request(
+      `/versions/${versionId}/snippets`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+    deleteVersionSnippet: (versionId, snippetId) => request(
+      `/versions/${versionId}/snippets/${snippetId}`,
+      { method: "DELETE" },
+    ),
   };
 }

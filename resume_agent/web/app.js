@@ -1170,9 +1170,141 @@ async function renderFactBase(expectedGeneration = baseActivationGate.current())
       selectTab("chat");
       await activateExperience(experience.id);
     });
-    card.append(grid, deepen);
+    card.append(grid, deepen, snippetCardSection(base, experience));
     root.append(card);
   });
+}
+
+function snippetCardSection(base, experience) {
+  const section = element("div", "snippet-cards");
+  const heading = element("h4", "", "片段卡");
+  const hint = element(
+    "p", "quality-caption",
+    editMode
+      ? "退出编辑模式后可拖拽卡片到右侧预览。"
+      : "拖拽卡片到右侧预览的经历段落或底部自定义片段区。",
+  );
+  const generate = element("button", "", "生成片段卡");
+  generate.type = "button";
+  generate.addEventListener("click", async () => {
+    generate.disabled = true;
+    try {
+      const result = await api.generateSnippets(base.id, experience.id);
+      if (!result.snippets.length) {
+        showToast("这段经历还没有可用的已确认事实");
+        return;
+      }
+      for (const snippet of result.snippets) {
+        section.append(snippetCard(experience.id, snippet));
+      }
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "片段生成失败");
+    } finally {
+      generate.disabled = false;
+    }
+  });
+  section.append(heading, hint, generate);
+  return section;
+}
+
+function snippetCard(experienceId, snippet) {
+  const card = element("article", "snippet-card");
+  card.draggable = true;
+  card.append(element("p", "", snippet.text));
+  card.addEventListener("dragstart", (event) => {
+    if (editMode) {
+      event.preventDefault();
+      showToast("请先退出编辑模式再拖拽片段");
+      return;
+    }
+    event.dataTransfer.setData(
+      "application/x-resume-snippet",
+      JSON.stringify({
+        experience_id: experienceId,
+        text: snippet.text,
+        source_fact_ids: snippet.source_fact_ids || [],
+      }),
+    );
+    event.dataTransfer.effectAllowed = "copy";
+  });
+  return card;
+}
+
+function wirePreviewDropTargets() {
+  const doc = byId("preview-frame").contentDocument;
+  if (!doc) return;
+  for (const target of doc.querySelectorAll("[data-section]")) {
+    if (target.dataset.dropWired) continue;
+    target.dataset.dropWired = "true";
+    target.addEventListener("dragover", (event) => {
+      if (!event.dataTransfer.types.includes("application/x-resume-snippet")) return;
+      event.preventDefault();
+      target.classList.add("drop-active");
+    });
+    target.addEventListener("dragleave", () => target.classList.remove("drop-active"));
+    target.addEventListener("drop", (event) => {
+      event.preventDefault();
+      target.classList.remove("drop-active");
+      const raw = event.dataTransfer.getData("application/x-resume-snippet");
+      if (raw) dropSnippet(target, raw);
+    });
+  }
+  doc.addEventListener("click", (event) => {
+    const button = event.target.closest(".snippet-remove");
+    if (!button) return;
+    removeVersionSnippet(button.dataset.snippetId);
+  });
+}
+
+async function dropSnippet(target, raw) {
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return;
+  }
+  if (!currentVersion || editMode) {
+    showToast("当前无法拖入片段");
+    return;
+  }
+  const experienceId = target.dataset.section === "custom"
+    ? null
+    : target.dataset.section.split(":")[1];
+  const renderedTexts = (currentRendered?.experiences || [])
+    .flatMap((item) => item.bullets || []);
+  const customTexts = (currentRendered?.custom_snippets || [])
+    .map((item) => item.text);
+  if (renderedTexts.includes(payload.text) || customTexts.includes(payload.text)) {
+    showToast("该片段已在简历中");
+    return;
+  }
+  try {
+    const updated = await api.addVersionSnippet(currentVersion.id, {
+      experience_id: experienceId,
+      text: payload.text,
+      source_fact_ids: payload.source_fact_ids,
+    });
+    versions = versions.map((item) => item.id === updated.id ? updated : item);
+    currentVersion = updated;
+    await renderDocument();
+    showToast("片段已写入简历");
+  } catch (error) {
+    showToast(error instanceof ApiError ? error.message : "片段写入失败");
+  }
+}
+
+async function removeVersionSnippet(snippetId) {
+  if (!currentVersion || editMode) return;
+  const versionId = currentVersion.id;
+  try {
+    const updated = await api.deleteVersionSnippet(versionId, snippetId);
+    versions = versions.map((item) => item.id === updated.id ? updated : item);
+    currentVersion = updated;
+    await renderDocument();
+    showToast("片段已移除");
+  } catch (error) {
+    showToast(error instanceof ApiError ? error.message : "片段移除失败");
+  }
 }
 
 async function chooseVersion(versionId, { languageGeneration = null } = {}) {
@@ -1800,6 +1932,7 @@ byId("markdown-editor-button").addEventListener("click", () => setEditorView("ma
 byId("reset-draft-button").addEventListener("click", resetDraft);
 byId("preview-frame").addEventListener("load", () => {
   if (editMode && editorView === "visual") setEditorView("visual");
+  wirePreviewDropTargets();
 });
 
 boot();

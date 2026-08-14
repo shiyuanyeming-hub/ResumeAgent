@@ -8,6 +8,9 @@ from resume_agent.domain.models import (
     CandidateProfile,
     CareerFactBase,
     CareerTarget,
+    Certification,
+    Education,
+    JapanExtra,
     utc_now,
 )
 
@@ -48,6 +51,45 @@ class FactBaseService:
         base = self.repository.get(fact_base_id)
         expected_revision = base.revision
         base.profile = profile
+        base.revision += 1
+        base.updated_at = utc_now()
+        self.repository.save(base, expected_revision=expected_revision)
+        return self.repository.get(base.id)
+
+    def update_education(
+        self,
+        fact_base_id: UUID,
+        education: List[Education],
+    ) -> CareerFactBase:
+        base = self.repository.get(fact_base_id)
+        expected_revision = base.revision
+        base.education = list(education)
+        base.revision += 1
+        base.updated_at = utc_now()
+        self.repository.save(base, expected_revision=expected_revision)
+        return self.repository.get(base.id)
+
+    def update_certifications(
+        self,
+        fact_base_id: UUID,
+        certifications: List[Certification],
+    ) -> CareerFactBase:
+        base = self.repository.get(fact_base_id)
+        expected_revision = base.revision
+        base.certifications = list(certifications)
+        base.revision += 1
+        base.updated_at = utc_now()
+        self.repository.save(base, expected_revision=expected_revision)
+        return self.repository.get(base.id)
+
+    def update_japan_extra(
+        self,
+        fact_base_id: UUID,
+        japan_extra: JapanExtra,
+    ) -> CareerFactBase:
+        base = self.repository.get(fact_base_id)
+        expected_revision = base.revision
+        base.japan_extra = japan_extra
         base.revision += 1
         base.updated_at = utc_now()
         self.repository.save(base, expected_revision=expected_revision)

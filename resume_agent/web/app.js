@@ -780,6 +780,158 @@ function profileForm() {
   return form;
 }
 
+function educationForm() {
+  const form = element("form", "profile-form");
+  const baseId = currentBase.id;
+  const baseGeneration = baseActivationGate.current();
+  const rows = element("div", "list-rows");
+
+  const addRow = (item = {}) => {
+    const row = element("div", "list-row");
+    const school = document.createElement("input");
+    school.placeholder = "学校（日文履歴書可直接填日文名）";
+    school.value = item.school || "";
+    const major = document.createElement("input");
+    major.placeholder = "专业";
+    major.value = item.major || "";
+    const start = document.createElement("input");
+    start.placeholder = "入学 2020-09";
+    start.value = item.start || "";
+    const end = document.createElement("input");
+    end.placeholder = "毕业 2024-06";
+    end.value = item.end || "";
+    const remove = element("button", "", "删除");
+    remove.type = "button";
+    remove.addEventListener("click", () => row.remove());
+    row.append(school, major, start, end, remove);
+    rows.append(row);
+  };
+  (currentBase.education || []).forEach(addRow);
+
+  const addButton = element("button", "", "+ 添加一条学歴");
+  addButton.type = "button";
+  addButton.addEventListener("click", () => addRow());
+  form.append(rows, addButton);
+
+  const save = element("button", "primary", "保存学歴");
+  save.type = "submit";
+  form.append(save);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    save.disabled = true;
+    const education = [...rows.querySelectorAll(".list-row")]
+      .map((row) => {
+        const [school, major, start, end] = row.querySelectorAll("input");
+        return {
+          school: school.value.trim(),
+          major: major.value.trim(),
+          start: start.value.trim(),
+          end: end.value.trim(),
+        };
+      })
+      .filter((item) => item.school || item.major || item.start || item.end);
+    try {
+      const updated = await api.updateEducation(baseId, education);
+      if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
+      replaceBase(updated);
+      showToast("学歴已保存");
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "学歴保存失败");
+    } finally {
+      save.disabled = false;
+    }
+  });
+  return form;
+}
+
+function certificationForm() {
+  const form = element("form", "profile-form");
+  const baseId = currentBase.id;
+  const baseGeneration = baseActivationGate.current();
+  const rows = element("div", "list-rows");
+
+  const addRow = (item = {}) => {
+    const row = element("div", "cert-row");
+    const name = document.createElement("input");
+    name.placeholder = "资格/证书名称（如 日本語能力試験 N2）";
+    name.value = item.name || item.name_ja || "";
+    const date = document.createElement("input");
+    date.placeholder = "取得年月 2023-12";
+    date.value = item.date || "";
+    const remove = element("button", "", "删除");
+    remove.type = "button";
+    remove.addEventListener("click", () => row.remove());
+    row.append(name, date, remove);
+    rows.append(row);
+  };
+  (currentBase.certifications || []).forEach(addRow);
+
+  const addButton = element("button", "", "+ 添加一项免許・資格");
+  addButton.type = "button";
+  addButton.addEventListener("click", () => addRow());
+  form.append(rows, addButton);
+
+  const save = element("button", "primary", "保存免許・資格");
+  save.type = "submit";
+  form.append(save);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    save.disabled = true;
+    const certifications = [...rows.querySelectorAll(".cert-row")]
+      .map((row) => {
+        const [name, date] = row.querySelectorAll("input");
+        return { name: name.value.trim(), name_ja: name.value.trim(), date: date.value.trim() };
+      })
+      .filter((item) => item.name || item.date);
+    try {
+      const updated = await api.updateCertifications(baseId, certifications);
+      if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
+      replaceBase(updated);
+      showToast("免許・資格已保存");
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "免許・資格保存失败");
+    } finally {
+      save.disabled = false;
+    }
+  });
+  return form;
+}
+
+function japanExtraForm() {
+  const form = element("form", "profile-form");
+  const baseId = currentBase.id;
+  const baseGeneration = baseActivationGate.current();
+  const extra = currentBase.japan_extra || {};
+  form.append(
+    field("志望動機", "motivation", "为什么申请这个职位", extra.motivation || "", "textarea"),
+    field("自己 PR", "self_pr", "你的核心优势", extra.self_pr || "", "textarea"),
+    field("本人希望欄", "desired_position", "例：データアナリスト", extra.desired_position || ""),
+  );
+  const save = element("button", "primary", "保存志望動機");
+  save.type = "submit";
+  form.append(save);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    save.disabled = true;
+    try {
+      const updated = await api.updateJapanExtra(baseId, {
+        motivation: String(data.get("motivation") || "").trim(),
+        self_pr: String(data.get("self_pr") || "").trim(),
+        desired_position: String(data.get("desired_position") || "").trim(),
+      });
+      if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
+      replaceBase(updated);
+      showToast("志望動機已保存");
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "志望動機保存失败");
+    } finally {
+      save.disabled = false;
+    }
+  });
+  return form;
+}
+
 function factValue(value) {
   const row = element("li", "fact-value", value.text);
   if (value.confidence === "estimated") row.append(element("span", "badge", "估算"));
@@ -801,6 +953,27 @@ async function renderFactBase(expectedGeneration = baseActivationGate.current())
   profileDetails.open = false;
   profileDetails.append(element("summary", "", "候选人基本信息"), profileForm());
   root.append(profileDetails);
+
+  const educationDetails = element("details", "profile-details");
+  educationDetails.open = false;
+  educationDetails.append(element("summary", "", "学歴（日文履歴書用）"), educationForm());
+  root.append(educationDetails);
+
+  const certificationDetails = element("details", "profile-details");
+  certificationDetails.open = false;
+  certificationDetails.append(
+    element("summary", "", "免許・資格（日文履歴書用）"),
+    certificationForm(),
+  );
+  root.append(certificationDetails);
+
+  const japanExtraDetails = element("details", "profile-details");
+  japanExtraDetails.open = false;
+  japanExtraDetails.append(
+    element("summary", "", "志望動機・自己PR・本人希望欄（日文履歴書用）"),
+    japanExtraForm(),
+  );
+  root.append(japanExtraDetails);
 
   const qualityReports = await Promise.all(base.experiences.map(async (experience) => {
     try {

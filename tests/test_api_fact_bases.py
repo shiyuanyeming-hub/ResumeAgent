@@ -57,3 +57,57 @@ def test_unknown_fact_base_returns_404(tmp_path):
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]
+
+
+def test_update_education_and_certifications(tmp_path):
+    with make_client(tmp_path) as client:
+        base = client.post("/fact-bases", json={}).json()
+
+        response = client.put(
+            f"/fact-bases/{base['id']}/education",
+            json={"education": [
+                {"school": "復旦大学", "major": "経済学", "start": "2020-09", "end": "2024-06"}
+            ]},
+        )
+        assert response.status_code == 200
+        assert response.json()["education"][0]["school"] == "復旦大学"
+        assert response.json()["revision"] == 1
+
+        response = client.put(
+            f"/fact-bases/{base['id']}/certifications",
+            json={"certifications": [
+                {"name_ja": "日本語能力試験 N2", "date": "2023-12"}
+            ]},
+        )
+        assert response.status_code == 200
+        assert response.json()["certifications"][0]["name_ja"] == "日本語能力試験 N2"
+        assert response.json()["revision"] == 2
+
+
+def test_update_japan_extra(tmp_path):
+    with make_client(tmp_path) as client:
+        base = client.post("/fact-bases", json={}).json()
+
+        response = client.put(
+            f"/fact-bases/{base['id']}/japan-extra",
+            json={
+                "motivation": "データ分析で貢献したい。",
+                "self_pr": "一気通貫で実行できる。",
+                "desired_position": "データアナリスト",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["japan_extra"]["motivation"] == "データ分析で貢献したい。"
+    assert response.json()["japan_extra"]["desired_position"] == "データアナリスト"
+
+
+def test_update_education_rejects_invalid_payload(tmp_path):
+    with make_client(tmp_path) as client:
+        base = client.post("/fact-bases", json={}).json()
+        response = client.put(
+            f"/fact-bases/{base['id']}/education",
+            json={"education": [{"school": 123}]},
+        )
+
+    assert response.status_code == 422

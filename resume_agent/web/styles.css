@@ -203,6 +203,12 @@ button:disabled, .button-link.disabled { cursor: not-allowed; opacity: 0.45; }
 .profile-details > summary, .dimension-group > summary { cursor: pointer; font-weight: 600; }
 .profile-form { display: grid; gap: 9px; margin-top: 12px; }
 .profile-form > button { justify-self: start; }
+.list-rows { display: grid; gap: 6px; }
+.list-row { display: grid; grid-template-columns: 1.4fr 1fr 0.9fr 0.9fr auto; gap: 6px; align-items: center; }
+.cert-row { display: grid; grid-template-columns: 1fr 0.9fr auto; gap: 6px; align-items: center; }
+.list-row input, .cert-row input { font: inherit; border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 9px; background: #fff; color: var(--ink); }
+.form-hint { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
 .experience-card h3 { color: var(--accent); font-size: 15px; margin: 0 0 4px; }
 .quality-caption, .empty-copy { color: var(--muted); font-size: 12px; }
 .dimension-list { display: grid; gap: 6px; margin: 10px 0; }

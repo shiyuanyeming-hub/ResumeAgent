@@ -138,6 +138,18 @@ export function createApi(fetchImpl = globalThis.fetch) {
       `/fact-bases/${factBaseId}/profile`,
       { method: "PATCH", body: JSON.stringify(profile) },
     ),
+    updateEducation: (factBaseId, education) => request(
+      `/fact-bases/${factBaseId}/education`,
+      { method: "PUT", body: JSON.stringify({ education }) },
+    ),
+    updateCertifications: (factBaseId, certifications) => request(
+      `/fact-bases/${factBaseId}/certifications`,
+      { method: "PUT", body: JSON.stringify({ certifications }) },
+    ),
+    updateJapanExtra: (factBaseId, japanExtra) => request(
+      `/fact-bases/${factBaseId}/japan-extra`,
+      { method: "PUT", body: JSON.stringify(japanExtra) },
+    ),
     experienceQuality: (factBaseId, experienceId) => request(
       `/fact-bases/${factBaseId}/experiences/${experienceId}/quality`,
     ),

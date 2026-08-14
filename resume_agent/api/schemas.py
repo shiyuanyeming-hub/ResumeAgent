@@ -5,7 +5,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from resume_agent.domain.models import CandidateProfile, CareerTarget, QualityDimension
+from resume_agent.domain.models import (
+    CandidateProfile,
+    CareerTarget,
+    Certification,
+    Education,
+    JapanExtra,
+    QualityDimension,
+)
 
 
 class FactBaseCreateRequest(BaseModel):
@@ -18,6 +25,18 @@ class ExperienceCreateRequest(BaseModel):
 
 
 class ProfileUpdateRequest(CandidateProfile):
+    pass
+
+
+class EducationUpdateRequest(BaseModel):
+    education: List[Education] = Field(default_factory=list)
+
+
+class CertificationsUpdateRequest(BaseModel):
+    certifications: List[Certification] = Field(default_factory=list)
+
+
+class JapanExtraUpdateRequest(JapanExtra):
     pass
 
 

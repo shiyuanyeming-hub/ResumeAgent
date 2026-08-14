@@ -19,8 +19,11 @@ from resume_agent.agents.unavailable import (
 )
 from resume_agent.api.schemas import (
     AnswerRequest,
+    CertificationsUpdateRequest,
+    EducationUpdateRequest,
     FactBaseCreateRequest,
     ExperienceCreateRequest,
+    JapanExtraUpdateRequest,
     ProfileUpdateRequest,
     SessionCreateRequest,
     UnknownRequest,
@@ -246,6 +249,41 @@ def create_app(
         request: ProfileUpdateRequest,
     ) -> CareerFactBase:
         return container.fact_bases.update_profile(fact_base_id, request)
+
+    @app.put(
+        "/fact-bases/{fact_base_id}/education",
+        response_model=CareerFactBase,
+        tags=["fact-bases"],
+    )
+    def update_education(
+        fact_base_id: UUID,
+        request: EducationUpdateRequest,
+    ) -> CareerFactBase:
+        return container.fact_bases.update_education(fact_base_id, request.education)
+
+    @app.put(
+        "/fact-bases/{fact_base_id}/certifications",
+        response_model=CareerFactBase,
+        tags=["fact-bases"],
+    )
+    def update_certifications(
+        fact_base_id: UUID,
+        request: CertificationsUpdateRequest,
+    ) -> CareerFactBase:
+        return container.fact_bases.update_certifications(
+            fact_base_id, request.certifications
+        )
+
+    @app.put(
+        "/fact-bases/{fact_base_id}/japan-extra",
+        response_model=CareerFactBase,
+        tags=["fact-bases"],
+    )
+    def update_japan_extra(
+        fact_base_id: UUID,
+        request: JapanExtraUpdateRequest,
+    ) -> CareerFactBase:
+        return container.fact_bases.update_japan_extra(fact_base_id, request)
 
     @app.get(
         "/fact-bases/{fact_base_id}/experiences/{experience_id}/quality",

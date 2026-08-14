@@ -1847,7 +1847,7 @@ class QuestionnaireService:
             if "experience" not in state.completed_sections:
                 state.completed_sections.append("experience")
             return base
-        kind = dict(EXPERIENCE_TYPE_OPTIONS).get(value)
+        kind = {label: code for code, label in EXPERIENCE_TYPE_OPTIONS}.get(value)
         if kind is None:
             raise ValueError("经历类型不正确")
         experience = Experience(

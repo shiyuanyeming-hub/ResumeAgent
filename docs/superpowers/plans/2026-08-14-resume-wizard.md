@@ -4559,7 +4559,7 @@ def test_add_and_remove_version_snippet(tmp_path):
             f"/versions/{version['id']}/snippets",
             json={"experience_id": None, "text": "一段自由补充内容", "source_fact_ids": []},
         )
-        assert duplicate.status_code == 400
+        assert duplicate.status_code == 422
         removed = client.delete(
             f"/versions/{version['id']}/snippets/{snippet['id']}"
         )

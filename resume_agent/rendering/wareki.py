@@ -66,12 +66,16 @@ def from_wareki(text: str) -> str | None:
     era = match.group(1)
     era_year = 1 if match.group(2) is None else int(match.group(2))
     month = int(match.group(3))
-    day = int(match.group(4)) if match.group(4) else 1
+    has_day = match.group(4) is not None
+    day = int(match.group(4)) if has_day else 1
     year = ERA_START_YEAR[era] + era_year - 1
 
     for index, (name, (sy, sm, sd)) in enumerate(ERA_RULES):
         if name != era:
             continue
+        # 月精度且落在元号首月时，按元号起始日计（如 平成元年1月 → 1989-01-08）
+        if not has_day and (year, month) == (sy, sm):
+            day = sd
         next_start = ERA_RULES[index - 1][1] if index > 0 else (9999, 12, 31)
         if (year, month, day) < (sy, sm, sd) or (year, month, day) >= next_start:
             return None

@@ -183,14 +183,15 @@ class ResumeExporter:
             stripped = line.rstrip()
             if not stripped:
                 continue
+            text = stripped.replace("**", "").replace("\\*", "*")
             if stripped.startswith("# "):
-                document.add_heading(stripped[2:], level=0)
+                document.add_heading(text[2:], level=0)
             elif stripped.startswith("## "):
-                document.add_heading(stripped[3:], level=1)
+                document.add_heading(text[3:], level=1)
             elif stripped.startswith("- "):
-                document.add_paragraph(stripped[2:], style="List Bullet")
+                document.add_paragraph(text[2:], style="List Bullet")
             else:
-                document.add_paragraph(stripped)
+                document.add_paragraph(text)
         buffer = BytesIO()
         document.save(buffer)
         return buffer.getvalue()

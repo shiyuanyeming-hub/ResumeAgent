@@ -138,6 +138,29 @@ def test_renderer_secondary_document_is_empty_outside_japanese():
         assert result.secondary_html == ""
 
 
+def test_renderer_produces_complete_documents_for_all_locales():
+    base, first, _ = evidence_fixture()
+    first.linked_skills = ["SQL", "Python"]
+    expectations = {
+        "zh": ("简历", "工作经历", "技能"),
+        "en": ("Resume", "Experience", "Skills"),
+        "ja": ("職務経歴書", "職務経歴", "活かせるスキル"),
+    }
+    for locale, (title, experience_heading, skills_heading) in expectations.items():
+        version = make_version(base, [first], locale=locale)
+        result = ResumeRenderer().render(base, version)
+
+        assert result.title == title
+        assert result.markdown.startswith("# ")
+        assert result.html.startswith("<!DOCTYPE html>")
+        assert experience_heading in result.markdown
+        assert experience_heading in result.html
+        assert skills_heading in result.markdown
+        assert "SQL" in result.skills
+        assert "搭建用户留存看板" in result.markdown  # 已确认事实进入三种语言渲染
+
+
+
 def test_renderer_only_includes_selected_experiences():
     base, first, second = evidence_fixture()
     version = make_version(base, [second])

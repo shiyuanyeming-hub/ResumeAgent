@@ -55,3 +55,12 @@ def test_from_wareki_rejects_out_of_era_range():
     assert from_wareki("平成元年1月1日") is None
     assert from_wareki("令和元年1月1日") is None  # 令和 begins 2019-05-01
     assert from_wareki("不存在的日期") is None
+
+
+def test_from_wareki_month_precision_snaps_to_era_start():
+    # 月精度且落在元号首月时，按元号起始日换算
+    assert from_wareki("平成元年1月") == "1989-01-08"
+    assert from_wareki("令和元年5月") == "2019-05-01"
+    assert from_wareki("昭和元年12月") == "1926-12-25"
+    assert from_wareki("昭和64年1月") == "1989-01-01"
+    assert from_wareki("平成2年3月") == "1990-03-01"

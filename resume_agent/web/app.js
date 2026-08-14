@@ -752,6 +752,12 @@ function profileForm() {
     field("电话", "phone", "", profile.phone || ""),
     field("所在地", "location", "", profile.location || ""),
     field("个人链接（每行一个）", "links", "", (profile.links || []).join("\n"), "textarea"),
+    element("p", "form-hint", "以下为日文履歴書专用字段（中文/英文简历会自动忽略）"),
+    field("姓名假名", "name_kana", "オウ メイ", profile.name_kana || ""),
+    field("出生日期", "birth", "2002-03-15", profile.birth || ""),
+    field("现住所", "address", "東京都新宿区", profile.address || ""),
+    field("最寄駅", "nearest_station", "新宿駅", profile.nearest_station || ""),
+    field("照片占位文字", "photo_note", "写真（3×4cm）", profile.photo_note || ""),
   );
   const save = element("button", "primary", "保存基本信息");
   save.type = "submit";
@@ -767,6 +773,11 @@ function profileForm() {
         phone: String(data.get("phone") || "").trim(),
         location: String(data.get("location") || "").trim(),
         links: String(data.get("links") || "").split("\n").map((item) => item.trim()).filter(Boolean),
+        name_kana: String(data.get("name_kana") || "").trim(),
+        birth: String(data.get("birth") || "").trim(),
+        address: String(data.get("address") || "").trim(),
+        nearest_station: String(data.get("nearest_station") || "").trim(),
+        photo_note: String(data.get("photo_note") || "").trim(),
       });
       if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
       replaceBase(updated);

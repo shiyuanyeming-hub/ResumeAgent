@@ -117,6 +117,9 @@ def test_export_secondary_rirekisho_for_japanese(tmp_path):
     assert html.content.decode("utf-8").startswith("<!DOCTYPE html>")
     with ZipFile(BytesIO(docx.content)) as archive:
         assert "word/document.xml" in archive.namelist()
+        document_xml = archive.read("word/document.xml").decode("utf-8")
+    assert "**" not in document_xml  # markdown 加粗标记不应进入 DOCX 文本
+    assert "オウ メイ" in document_xml
 
 
 def test_export_secondary_rejects_non_japanese(rendered_resume):

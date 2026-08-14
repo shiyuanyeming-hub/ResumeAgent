@@ -254,6 +254,7 @@ class InterviewSession(BaseModel):
 class QuestionnaireState(BaseModel):
     fact_base_id: UUID
     skipped: List[str] = Field(default_factory=list)
+    answered: List[str] = Field(default_factory=list)
     completed_sections: List[str] = Field(default_factory=list)
     edited_education_id: Optional[UUID] = None
     edited_experience_id: Optional[UUID] = None

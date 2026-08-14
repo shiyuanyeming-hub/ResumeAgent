@@ -801,12 +801,14 @@ function renderQuestionCard(card) {
     readValue = () => ({ value: input.value.trim() });
   } else if (card.kind === "choice" || card.kind === "choice_free") {
     const optionsBox = element("div", "choice-options");
+    const optionCount = (card.options || []).length;
     for (const option of card.options || []) {
       const label = element("label", "check-row");
       const radio = document.createElement("input");
       radio.type = "radio";
       radio.name = `choice-${card.step_id}`;
       radio.value = option;
+      if (optionCount === 1) radio.checked = true;
       label.append(radio, document.createTextNode(option));
       optionsBox.append(label);
     }

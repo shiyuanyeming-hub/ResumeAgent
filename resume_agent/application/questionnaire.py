@@ -134,6 +134,11 @@ class QuestionnaireEngine:
         if not base.educations:
             if self._skipped(state, "education:add"):
                 return None
+            if "education:add" in state.answered:
+                return self._card(
+                    "education:new:school", "education", QuestionKind.TEXT,
+                    "学校名称是？", skippable=False,
+                )
             return self._card(
                 "education:add", "education", QuestionKind.CHOICE,
                 "开始填写教育背景？", options=["开始填写"],
@@ -365,6 +370,8 @@ class QuestionnaireService:
         base = self.fact_bases.get(fact_base_id)
         state = self._state(fact_base_id)
         self._dispatch(base, state, step_id, value, values, extra)
+        if step_id not in state.answered:
+            state.answered.append(step_id)
         state.updated_at = utc_now()
         self.repository.save(state)
         return self.fact_bases.get(base.id)

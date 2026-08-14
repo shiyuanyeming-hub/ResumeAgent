@@ -403,3 +403,20 @@ def test_engine_role_card_uses_guide_role_options():
     card = QuestionnaireEngine(guide=RoleGuide()).next_card(base, state)
     assert card.step_id == f"experience:{experience.id}:role"
     assert card.options == ["数据分析实习生", "产品实习生"]
+
+
+def test_education_add_answer_advances_to_school_card():
+    """回答「开始填写」后必须推进到学校名称，而不是停在原卡（回归：确认无反应）。"""
+    questionnaire, base = make_service()
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="数据分析师")
+    questionnaire.skip(base.id, "target:city")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "education:add"
+    questionnaire.answer(base.id, "education:add", value="开始填写")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "education:new:school"

@@ -1590,12 +1590,16 @@ function snippetCard(experienceId, snippet) {
   return card;
 }
 
+const wiredDropTargets = new WeakSet();
+
 function wirePreviewDropTargets() {
   const doc = byId("preview-frame").contentDocument;
   if (!doc) return;
   for (const target of doc.querySelectorAll("[data-section]")) {
-    if (target.dataset.dropWired) continue;
-    target.dataset.dropWired = "true";
+    // 用内存 WeakSet 标记：不能写在 DOM 属性上，否则可视化编辑保存后
+    // 属性被存进编辑稿，重载后所有拖放目标都会被当成「已绑定」而跳过。
+    if (wiredDropTargets.has(target)) continue;
+    wiredDropTargets.add(target);
     target.addEventListener("dragover", (event) => {
       if (!event.dataTransfer.types.includes("application/x-resume-snippet")) return;
       event.preventDefault();
@@ -1609,6 +1613,7 @@ function wirePreviewDropTargets() {
       if (raw) dropSnippet(target, raw);
     });
   }
+  // 每个 load 事件都会创建新文档，直接绑定一次即可
   doc.addEventListener("click", (event) => {
     const button = event.target.closest(".snippet-remove");
     if (!button) return;
@@ -1997,7 +2002,14 @@ function beginEditor() {
 
 function editedHtml() {
   const documentRoot = byId("preview-frame").contentDocument?.documentElement;
-  return documentRoot ? `<!DOCTYPE html>\n${documentRoot.outerHTML}` : currentRendered?.html || "";
+  if (!documentRoot) return currentRendered?.html || "";
+  // 清理拖拽运行期状态，避免把 data-drop-wired / drop-active 存进编辑稿
+  const clone = documentRoot.cloneNode(true);
+  for (const node of clone.querySelectorAll("[data-drop-wired], .drop-active")) {
+    node.removeAttribute("data-drop-wired");
+    node.classList.remove("drop-active");
+  }
+  return `<!DOCTYPE html>\n${clone.outerHTML}`;
 }
 
 async function saveEditor() {

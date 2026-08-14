@@ -33,6 +33,7 @@ def create_default_app(environ: Optional[Mapping[str, str]] = None):
         course_advisor=runtime.course_advisor,
         skill_advisor=runtime.skill_advisor,
         agent_capabilities=runtime.capabilities,
+        summary_agent=runtime.summary_writer,
     )
 
 

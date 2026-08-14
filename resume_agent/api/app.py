@@ -27,6 +27,7 @@ from resume_agent.api.schemas import (
     QuestionnaireAnswerRequest,
     QuestionnaireSkipRequest,
     SessionCreateRequest,
+    SummarySetRequest,
     UnknownRequest,
     VersionCloneRequest,
     VersionCreateRequest,
@@ -42,6 +43,7 @@ from resume_agent.application.interview_service import (
     UnknownOutcome,
 )
 from resume_agent.application.render_service import ResumeRenderService
+from resume_agent.application.summary_service import SummaryService
 from resume_agent.application.ports import (
     FactAuditAgent,
     QuestionWriterAgent,
@@ -88,6 +90,7 @@ class ServiceContainer:
     interviews: InterviewService
     versions: VersionService
     rendering: ResumeRenderService
+    summaries: SummaryService
     capabilities: AgentCapabilityStatus
 
 
@@ -101,6 +104,7 @@ def create_app(
     resume_exporter: Optional[ResumeExporter] = None,
     resume_renderer: Optional[ResumeRenderer] = None,
     agent_capabilities: Optional[AgentCapabilityStatus] = None,
+    summary_agent=None,
 ) -> FastAPI:
     store = SQLiteStore(Path(database_path))
     fact_base_repository = SQLiteFactBaseRepository(store)
@@ -157,6 +161,7 @@ def create_app(
             renderer,
             exporter,
         ),
+        summaries=SummaryService(summary_agent),
         capabilities=capabilities,
     )
     app = FastAPI(
@@ -193,6 +198,11 @@ def create_app(
             extra=payload.extra,
         )
         version = _current_version(fact_base_id)
+        if payload.step_id == "summary:pick" and version is not None:
+            container.versions.set_summary(
+                version.id,
+                "；".join(value for value in payload.values if value.strip()),
+            )
         return {
             "base": base,
             "next": container.questionnaires.next_card(fact_base_id, version),
@@ -590,6 +600,18 @@ def create_app(
             request.markdown,
             request.html,
         )
+
+    @app.post("/versions/{version_id}/summary-options/generate")
+    def generate_summary_options(version_id: UUID):
+        version = container.version_repository.get(version_id)
+        base = container.fact_base_repository.get(version.fact_base_id)
+        options = container.summaries.generate(base, version)
+        updated = container.versions.set_summary_options(version_id, options)
+        return {"options": updated.summary_options}
+
+    @app.put("/versions/{version_id}/summary")
+    def set_version_summary(version_id: UUID, payload: SummarySetRequest):
+        return container.versions.set_summary(version_id, payload.text)
 
     @app.post(
         "/versions/{version_id}/activate",

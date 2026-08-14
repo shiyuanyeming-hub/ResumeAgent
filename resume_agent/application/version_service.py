@@ -107,6 +107,16 @@ class VersionService:
         version.manual_html = html
         return self.save(version)
 
+    def set_summary_options(self, version_id: UUID, options: List[str]) -> ResumeVersion:
+        version = self.repository.get(version_id)
+        version.summary_options = list(options)
+        return self.save(version)
+
+    def set_summary(self, version_id: UUID, text: str) -> ResumeVersion:
+        version = self.repository.get(version_id)
+        version.selected_summary = text.strip()
+        return self.save(version)
+
     def activate(self, version_id: UUID) -> ResumeVersion:
         return self.repository.activate(version_id)
 

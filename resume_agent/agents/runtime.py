@@ -19,8 +19,10 @@ from resume_agent.agents.prompts import FACT_AUDIT_PROMPT, QUESTION_WRITER_PROMP
 from resume_agent.agents.specialists import (
     COURSE_RECOMMEND_PROMPT,
     SKILL_EXTRACT_PROMPT,
+    SUMMARY_OPTIONS_PROMPT,
     StructuredCourseAgent,
     StructuredSkillAgent,
+    StructuredSummaryAgent,
 )
 from resume_agent.agents.unavailable import AgentUnavailableError
 from resume_agent.application.ports import FactAuditAgent, QuestionWriterAgent
@@ -111,6 +113,7 @@ class AgentCapabilityStatus(BaseModel):
     question_writer: bool = False
     course_recommendation: bool = False
     skill_suggestions: bool = False
+    summary_options: bool = False
     rendering: bool = True
     exports: list[str] = Field(default_factory=lambda: ["html", "md", "docx", "pdf"])
     framework: str = "HelloAgents"
@@ -130,6 +133,7 @@ class AgentCapabilityStatus(BaseModel):
             question_writer=True,
             course_recommendation=True,
             skill_suggestions=True,
+            summary_options=True,
             model=model,
         )
 
@@ -141,6 +145,7 @@ class MentorRuntime:
     capabilities: AgentCapabilityStatus
     course_advisor: Optional[StructuredCourseAgent] = None
     skill_advisor: Optional[StructuredSkillAgent] = None
+    summary_writer: Optional[StructuredSummaryAgent] = None
 
 
 class FreshAgentRunner:
@@ -253,10 +258,19 @@ def build_mentor_runtime(
             config=_private_agent_config(framework),
         )
     )
+    summary_runner = FreshAgentRunner(
+        lambda: framework.SimpleAgent(
+            name="自我评价备选",
+            llm=llm,
+            system_prompt=SUMMARY_OPTIONS_PROMPT,
+            config=_private_agent_config(framework),
+        )
+    )
     return MentorRuntime(
         fact_auditor=StructuredFactAuditAgent(audit_runner),
         question_writer=StructuredQuestionWriterAgent(question_runner),
         course_advisor=StructuredCourseAgent(course_runner),
         skill_advisor=StructuredSkillAgent(skill_runner),
+        summary_writer=StructuredSummaryAgent(summary_runner),
         capabilities=AgentCapabilityStatus.ready(settings.model),
     )

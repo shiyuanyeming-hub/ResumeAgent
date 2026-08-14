@@ -86,6 +86,10 @@ class EducationCreateRequest(BaseModel):
     core_courses: List[str] = Field(default_factory=list)
 
 
+class SummarySetRequest(BaseModel):
+    text: str = Field(min_length=1)
+
+
 class ExperienceUpdateRequest(BaseModel):
     organization: Optional[str] = None
     role: Optional[str] = None

@@ -402,3 +402,4 @@ dialog p { color: var(--muted); line-height: 1.6; }
 .school-suggestion:hover { background: #eff6ff; }
 .photo-preview { width: 84px; height: 110px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border, #d8dde5); margin-top: 10px; }
 .photo-actions { align-items: center; }
+.boot-warning { color: var(--warning, #b45309); font-size: 13px; margin-top: 8px; }

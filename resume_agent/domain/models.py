@@ -101,6 +101,13 @@ class Experience(BaseModel):
         # 问卷流会先创建带类型的空白经历再逐项填写；非空由问卷与 API 层保证。
         return value.strip()
 
+    @field_validator("end", mode="before")
+    @classmethod
+    def tolerate_null_end(cls, value):
+        # 历史数据曾把「至今」存为 None，而 end 是 str 字段；
+        # 容忍 None 并规范化为空串，避免旧档案拖垮整个档案列表加载。
+        return value or ""
+
 
 class Education(BaseModel):
     id: UUID = Field(default_factory=uuid4)

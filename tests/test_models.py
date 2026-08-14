@@ -121,3 +121,15 @@ def test_version_carries_snippet_and_summary_fields():
 def test_version_snippet_requires_text():
     with pytest.raises(ValidationError):
         VersionSnippet(text=" ")
+
+
+def test_experience_null_end_normalizes_to_empty_string():
+    """历史数据曾把「至今」存成 null，加载时必须归一化为空串，否则档案列表整个 422。"""
+    import json
+
+    base = CareerFactBase()
+    base.add_experience("星河科技", "实习生")
+    payload = json.loads(base.model_dump_json())
+    payload["experiences"][0]["end"] = None
+    loaded = CareerFactBase.model_validate(payload)
+    assert loaded.experiences[0].end == ""

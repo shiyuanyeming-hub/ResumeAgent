@@ -232,9 +232,14 @@ function renderBaseSwitcher() {
     select.disabled = true;
   } else {
     if (!currentBase) select.append(new Option("新档案（尚未保存）", "", true, true));
-    for (const base of bases) {
+    const ordered = [...bases].sort((a, b) => String(b.updated_at || "")
+      .localeCompare(String(a.updated_at || "")));
+    for (const base of ordered) {
       const role = base.target?.role?.trim() || "未命名岗位";
-      select.append(new Option(role, base.id, false, base.id === currentBase?.id));
+      const name = base.profile?.name?.trim();
+      const counts = `教育${(base.educations || []).length} · 经历${(base.experiences || []).length}`;
+      const label = `${role}${name ? ` · ${name}` : ""}（${counts}）`;
+      select.append(new Option(label, base.id, false, base.id === currentBase?.id));
     }
     select.disabled = sessionTransitionGate.isTransitioning();
   }
@@ -348,9 +353,7 @@ function startNewBase() {
   currentExperienceQuality = null;
   versions = [];
   currentVersion = null;
-  for (const key of ["factBaseId", "experienceId", "sessionId", "versionId"]) {
-    delete state[key];
-  }
+  // 保留 state.factBaseId：刷新后仍能回到上次编辑的档案
   saveState();
   languageIntentLocale = state.locale;
   byId("language-button").textContent = LANGUAGE_LABELS[state.locale];
@@ -420,7 +423,7 @@ async function activateExperience(experienceId) {
   }
 }
 
-function renderOnboarding() {
+function renderOnboarding(bootFailed = false) {
   currentSession = null;
   const panel = byId("chat-panel");
   panel.replaceChildren();
@@ -429,6 +432,12 @@ function renderOnboarding() {
     element("h2", "", "你要做一份什么样的简历？"),
     element("p", "", "先选择简历语言。中文向导已就绪，日文与英文即将支持。"),
   );
+  if (bootFailed) {
+    heading.append(element(
+      "p", "boot-warning",
+      "连接服务失败：你之前填写的内容仍保存在服务端，不会丢失。",
+    ));
+  }
 
   const choices = element("div", "language-choices");
   for (const [locale, label] of [
@@ -442,6 +451,15 @@ function renderOnboarding() {
     choices.append(button);
   }
   panel.append(heading, choices);
+  if (bootFailed) {
+    const retry = element("button", "text-button", "重新连接并回到上次的档案");
+    retry.type = "button";
+    retry.addEventListener("click", () => {
+      panel.replaceChildren(element("p", "question-prompt", "正在重新连接…"));
+      boot();
+    });
+    panel.append(retry);
+  }
   byId("chat-composer").hidden = true;
 }
 
@@ -2276,14 +2294,18 @@ async function boot() {
     renderBaseSwitcher();
     capabilitiesState = capabilities;
     setServiceStatus(capabilities);
-    const base = bases.find((item) => item.id === state.factBaseId) || bases.at(-1) || null;
+    // 优先回到上次使用的档案；否则取最近编辑（而不是最近创建）的档案
+    const base = bases.find((item) => item.id === state.factBaseId)
+      || [...bases].sort((a, b) => String(b.updated_at || "")
+        .localeCompare(String(a.updated_at || "")))[0]
+      || null;
     if (base) await activateBase(base);
     else renderOnboarding();
   } catch (error) {
     capabilitiesState = null;
     setServiceStatus(null);
     renderBaseSwitcher();
-    renderOnboarding();
+    renderOnboarding(true);
     showToast(error instanceof ApiError ? error.message : "页面初始化失败");
   }
 }

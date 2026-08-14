@@ -84,3 +84,42 @@ def test_pdf_export_uses_injected_browser_command(tmp_path, rendered_resume):
 
     assert exported.media_type == "application/pdf"
     assert exported.content.startswith(b"%PDF-")
+
+
+def test_export_secondary_rirekisho_for_japanese(tmp_path):
+    from resume_agent.domain.models import Certification, Education
+
+    base = CareerFactBase()
+    base.profile.name = "王明"
+    base.profile.name_kana = "オウ メイ"
+    base.profile.birth = "2002-03-15"
+    base.education = [Education(school="復旦大学", start="2020-09", end="2024-06")]
+    base.certifications = [Certification(name_ja="日本語能力試験 N2", date="2023-12")]
+    experience = base.add_experience("云数科技", "数据分析师")
+    experience.start = "2023-07"
+    experience.end = "2024-06"
+    version = VersionService(InMemoryVersionRepository()).create(
+        base,
+        "日文版本",
+        selected_experience_ids=[experience.id],
+    )
+    version.locale = "ja"
+    rendered = ResumeRenderer().render(base, version)
+
+    exporter = ResumeExporter()
+    markdown = exporter.export_secondary(rendered, RenderFormat.MARKDOWN)
+    html = exporter.export_secondary(rendered, RenderFormat.HTML)
+    docx = exporter.export_secondary(rendered, RenderFormat.DOCX)
+
+    assert "rirekisho" in markdown.filename
+    assert "履歴書" in markdown.content.decode("utf-8")
+    assert "オウ メイ" in markdown.content.decode("utf-8")
+    assert html.content.decode("utf-8").startswith("<!DOCTYPE html>")
+    with ZipFile(BytesIO(docx.content)) as archive:
+        assert "word/document.xml" in archive.namelist()
+
+
+def test_export_secondary_rejects_non_japanese(rendered_resume):
+    exporter = ResumeExporter()
+    with pytest.raises(ValueError, match="secondary"):
+        exporter.export_secondary(rendered_resume, RenderFormat.MARKDOWN)

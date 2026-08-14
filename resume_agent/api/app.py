@@ -6,7 +6,7 @@ from typing import Optional
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import FastAPI, Request, Response, status
+from fastapi import FastAPI, Query, Request, Response, status
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -403,8 +403,15 @@ def create_app(
         "/versions/{version_id}/export",
         tags=["rendering"],
     )
-    def export_version(version_id: UUID, format: RenderFormat) -> Response:
-        exported = container.rendering.export(version_id, format)
+    def export_version(
+        version_id: UUID,
+        format: RenderFormat,
+        doc: str = Query("primary", pattern="^(primary|rirekisho)$"),
+    ) -> Response:
+        if doc == "rirekisho":
+            exported = container.rendering.export_secondary(version_id, format)
+        else:
+            exported = container.rendering.export(version_id, format)
         ascii_filename = f"resume_{format.value}.{format.value}"
         encoded_filename = quote(exported.filename)
         disposition = (

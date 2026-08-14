@@ -34,3 +34,8 @@ class RenderedResume(BaseModel):
     markdown: str
     html: str
     warnings: list[RenderWarning] = Field(default_factory=list)
+    # Japanese-only companion document (履歴書). Empty for zh/en.
+    secondary_title: str = ""
+    secondary_markdown: str = ""
+    secondary_html: str = ""
+    secondary_filename_stem: str = ""

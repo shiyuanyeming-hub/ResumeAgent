@@ -138,6 +138,63 @@ class ResumeExporter:
             )
         raise ValueError(f"unsupported render format: {format}")
 
+    def export_secondary(
+        self,
+        rendered: RenderedResume,
+        format: RenderFormat,
+    ) -> ExportedFile:
+        """Export the Japanese 履歴書 companion document (ja locale only)."""
+        if not rendered.secondary_title:
+            raise ValueError("this version has no secondary (rirekisho) document")
+        stem = rendered.secondary_filename_stem or f"{rendered.filename_stem}_rirekisho"
+        if format is RenderFormat.HTML:
+            return ExportedFile(
+                filename=f"{stem}.html",
+                media_type="text/html",
+                content=rendered.secondary_html.encode("utf-8"),
+            )
+        if format is RenderFormat.MARKDOWN:
+            return ExportedFile(
+                filename=f"{stem}.md",
+                media_type="text/markdown",
+                content=rendered.secondary_markdown.encode("utf-8"),
+            )
+        if format is RenderFormat.DOCX:
+            return ExportedFile(
+                filename=f"{stem}.docx",
+                media_type=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"
+                ),
+                content=self._docx_from_markdown(rendered.secondary_markdown),
+            )
+        if format is RenderFormat.PDF:
+            return ExportedFile(
+                filename=f"{stem}.pdf",
+                media_type="application/pdf",
+                content=self.pdf_exporter.export(rendered.secondary_html),
+            )
+        raise ValueError(f"unsupported render format: {format}")
+
+    @staticmethod
+    def _docx_from_markdown(markdown: str) -> bytes:
+        document = Document()
+        for line in markdown.split("\n"):
+            stripped = line.rstrip()
+            if not stripped:
+                continue
+            if stripped.startswith("# "):
+                document.add_heading(stripped[2:], level=0)
+            elif stripped.startswith("## "):
+                document.add_heading(stripped[3:], level=1)
+            elif stripped.startswith("- "):
+                document.add_paragraph(stripped[2:], style="List Bullet")
+            else:
+                document.add_paragraph(stripped)
+        buffer = BytesIO()
+        document.save(buffer)
+        return buffer.getvalue()
+
     @staticmethod
     def _docx(rendered: RenderedResume) -> bytes:
         document = Document()

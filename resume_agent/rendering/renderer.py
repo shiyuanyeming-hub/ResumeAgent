@@ -108,6 +108,12 @@ class ResumeRenderer:
             experiences,
             skills,
         )
+        secondary_title = secondary_markdown = secondary_html = secondary_stem = ""
+        if version.locale == "ja":
+            secondary_title = "履歴書"
+            secondary_markdown = self._rirekisho_markdown(base, version)
+            secondary_html = self._rirekisho_html(base, version, theme)
+            secondary_stem = f"{filename_stem}_rirekisho"
         return RenderedResume(
             version_id=version.id,
             base_revision=base.revision,
@@ -125,6 +131,10 @@ class ResumeRenderer:
             markdown=markdown,
             html=rendered_html,
             warnings=warnings,
+            secondary_title=secondary_title,
+            secondary_markdown=secondary_markdown,
+            secondary_html=secondary_html,
+            secondary_filename_stem=secondary_stem,
         )
 
     def _resolve_experiences(
@@ -261,6 +271,162 @@ class ResumeRenderer:
         normalized_start = start.replace("-", ".") if start else ""
         normalized_end = end.replace("-", ".") if end else COPY[locale]["present"]
         return f"{normalized_start} – {normalized_end}".strip()
+
+    def _rirekisho_events(
+        self,
+        base: CareerFactBase,
+        version: ResumeVersion,
+    ) -> list[tuple[str, str]]:
+        """Chronological 学歴・職歴 rows for the Japanese rirekisho."""
+        events: list[tuple[str, str]] = []
+        for edu in base.education:
+            school = edu.school_ja or edu.school
+            major = edu.major_ja or edu.major
+            if edu.start:
+                events.append((edu.start, f"{school} {major}学部 入学"))
+            if edu.end:
+                events.append((edu.end, f"{school} 卒業"))
+        by_id = {experience.id: experience for experience in base.experiences}
+        for experience_id in version.selected_experience_ids:
+            experience = by_id.get(experience_id)
+            if experience is None:
+                continue
+            if experience.start:
+                events.append(
+                    (experience.start, f"{experience.organization} 入社（{experience.role}）")
+                )
+            if experience.end:
+                events.append((experience.end, f"{experience.organization} 退社"))
+        events.sort(key=lambda item: item[0])
+        return events
+
+    def _rirekisho_markdown(self, base: CareerFactBase, version: ResumeVersion) -> str:
+        profile = base.profile
+        birth_jp = to_wareki_date(profile.birth) if profile.birth else "（未記入）"
+        lines = [
+            "# 履歴書",
+            "",
+            f"- **氏名**：{self._markdown_escape(profile.name)}"
+            f"（{self._markdown_escape(profile.name_kana)}）",
+            f"- **生年月日**：{birth_jp}",
+        ]
+        if profile.phone:
+            lines.append(f"- **電話**：{self._markdown_escape(profile.phone)}")
+        if profile.email:
+            lines.append(f"- **メール**：{self._markdown_escape(profile.email)}")
+        if profile.address:
+            lines.append(f"- **現住所**：{self._markdown_escape(profile.address)}")
+        if profile.nearest_station:
+            lines.append(f"- **最寄駅**：{self._markdown_escape(profile.nearest_station)}")
+        lines.append("- **写真**：（3×4cm 証明写真貼付欄）")
+        lines += ["", "## 学歴・職歴", ""]
+        for date, text in self._rirekisho_events(base, version):
+            lines.append(f"- {to_wareki_date(date)}　{self._markdown_escape(text)}")
+        lines += ["", "## 免許・資格", ""]
+        if base.certifications:
+            for certification in base.certifications:
+                name = certification.name_ja or certification.name
+                suffix = f"（{to_wareki_date(certification.date)}）" if certification.date else ""
+                lines.append(f"- {self._markdown_escape(name)}{suffix}")
+        else:
+            lines.append("- 特になし")
+        japan_extra = base.japan_extra
+        lines += [
+            "",
+            "## 志望動機",
+            "",
+            japan_extra.motivation or "（未記入）",
+            "",
+            "## 本人希望欄",
+            "",
+            japan_extra.desired_position or "貴社規定に従います。",
+            "",
+        ]
+        return "\n".join(lines)
+
+    def _rirekisho_html(self, base: CareerFactBase, version: ResumeVersion, theme) -> str:
+        profile = base.profile
+        birth_jp = to_wareki_date(profile.birth) if profile.birth else "（未記入）"
+        escape = lambda value: html.escape(value or "", quote=True)
+        events_rows = "".join(
+            f"<tr><td>{escape(to_wareki_date(date))}</td><td>{escape(text)}</td></tr>"
+            for date, text in self._rirekisho_events(base, version)
+        )
+        certifications = base.certifications
+        cert_html = (
+            "<ul>"
+            + "".join(
+                f"<li>{escape(certification.name_ja or certification.name)}"
+                + (f"（{escape(to_wareki_date(certification.date))}）" if certification.date else "")
+                + "</li>"
+                for certification in certifications
+            )
+            + "</ul>"
+        ) if certifications else "<p>特になし</p>"
+        japan_extra = base.japan_extra
+        css = f"""
+        :root {{--accent:{theme.accent};--tint:{theme.tint};}}
+        @page {{ size: A4; margin: 12mm; }}
+        * {{ box-sizing: border-box; }}
+        body {{ font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans GB","Noto Sans CJK JP",sans-serif;
+                font-size: 10.5pt; line-height: 1.6; color: #1a1a1a; margin: 0; }}
+        .title-band {{ background: var(--accent); color: #fff; text-align: center; font-size: 14pt;
+                       font-weight: bold; letter-spacing: 6px; padding: 2mm 0; margin-bottom: 3mm; }}
+        .head-row {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2.5mm; }}
+        .person {{ font-size: 13pt; font-weight: bold; }}
+        .person .kana {{ font-size: 10pt; color: #555; font-weight: normal; }}
+        .photo-box {{ width: 26mm; height: 34mm; border: .8pt solid var(--accent); background: var(--tint);
+                      color: #8a9bb0; font-size: 8pt; display: flex; align-items: center;
+                      justify-content: center; text-align: center; }}
+        table.grid {{ width: 100%; border-collapse: collapse; }}
+        table.grid td, table.grid th {{ border: .7pt solid var(--accent); padding: 1.6mm 3mm; vertical-align: top; }}
+        .kv td:first-child {{ width: 26mm; background: var(--tint); font-weight: bold; color: var(--accent); }}
+        table.grid th {{ background: var(--tint); color: var(--accent); }}
+        h2 {{ font-size: 11.5pt; color: var(--accent); border-bottom: 1.2pt solid var(--accent);
+              padding-bottom: .8mm; margin: 3.8mm 0 1.6mm; }}
+        ul {{ margin: 1mm 0 2mm; padding-left: 5mm; }} li {{ margin: .7mm 0; }}
+        p {{ margin: 1mm 0; }}
+        """
+        body = (
+            '<div class="title-band">履　歴　書</div>'
+            '<div class="head-row">'
+            f'<div class="person">{escape(profile.name)} '
+            f'<span class="kana">（{escape(profile.name_kana)}）</span></div>'
+            f'<div class="photo-box">{escape(profile.photo_note or "写真")}<br>（3×4cm）</div>'
+            '</div>'
+        )
+        kv_rows = [
+            ("生年月日", birth_jp),
+            ("電話", profile.phone),
+            ("メール", profile.email),
+            ("現住所", profile.address),
+            ("最寄駅", profile.nearest_station),
+        ]
+        body += (
+            '<table class="grid kv">'
+            + "".join(
+                f"<tr><td>{escape(key)}</td><td>{escape(value) or '（未記入）'}</td></tr>"
+                for key, value in kv_rows
+            )
+            + "</table>"
+        )
+        body += (
+            '<h2>学歴・職歴</h2><table class="grid">'
+            '<tr><th style="width:34mm">年　　月</th><th>学歴・職歴</th></tr>'
+            + events_rows
+            + "</table>"
+        )
+        body += "<h2>免許・資格</h2>" + cert_html
+        body += "<h2>志望動機</h2><p>" + escape(japan_extra.motivation or "（未記入）") + "</p>"
+        body += "<h2>本人希望欄</h2><p>" + escape(japan_extra.desired_position or "貴社規定に従います。") + "</p>"
+        return (
+            '<!DOCTYPE html>\n<html lang="ja"><head><meta charset="utf-8">'
+            "<title>履歴書</title><style>"
+            + css
+            + "</style></head><body>"
+            + body
+            + "</body></html>"
+        )
 
     @staticmethod
     def _filename_stem(name: str, locale: str) -> str:

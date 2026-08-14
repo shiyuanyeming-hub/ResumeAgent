@@ -5,7 +5,9 @@ import pytest
 from resume_agent.domain.models import (
     CandidateProfile,
     CareerFactBase,
+    Certification,
     ConfidenceStatus,
+    Education,
     FactValue,
     QualityDimension,
     ResumeVersion,
@@ -93,6 +95,47 @@ def test_renderer_keeps_western_dates_for_chinese_and_english():
         version = make_version(base, [first], locale=locale)
         result = ResumeRenderer().render(base, version)
         assert result.experiences[0].period == expected
+
+
+def test_renderer_builds_japanese_rirekisho_companion():
+    base, first, _ = evidence_fixture()
+    base.profile.name = "王明"
+    base.profile.name_kana = "オウ メイ"
+    base.profile.birth = "2002-03-15"
+    base.profile.address = "東京都新宿区"
+    base.profile.nearest_station = "新宿駅"
+    base.education = [
+        Education(school="復旦大学", major="経済学", start="2020-09", end="2024-06")
+    ]
+    base.certifications = [
+        Certification(name_ja="日本語能力試験 N2", date="2023-12")
+    ]
+    base.japan_extra.motivation = "データ分析で事業成長に貢献したいと考え、志望いたしました。"
+    base.japan_extra.desired_position = "データアナリスト"
+    version = make_version(base, [first], locale="ja")
+
+    result = ResumeRenderer().render(base, version)
+
+    assert result.secondary_title == "履歴書"
+    assert "オウ メイ" in result.secondary_markdown
+    assert "平成14年3月15日" in result.secondary_markdown  # birth 和暦
+    assert "令和2年9月" in result.secondary_markdown  # 学歴 入学
+    assert "令和6年6月" in result.secondary_markdown  # 卒業
+    assert "令和5年12月" in result.secondary_markdown  # 免許・資格
+    assert "志望動機" in result.secondary_markdown
+    assert "本人希望欄" in result.secondary_markdown
+    assert "写真" in result.secondary_html
+    assert "履　歴　書" in result.secondary_html
+
+
+def test_renderer_secondary_document_is_empty_outside_japanese():
+    base, first, _ = evidence_fixture()
+    for locale in ("zh", "en"):
+        version = make_version(base, [first], locale=locale)
+        result = ResumeRenderer().render(base, version)
+        assert result.secondary_title == ""
+        assert result.secondary_markdown == ""
+        assert result.secondary_html == ""
 
 
 def test_renderer_only_includes_selected_experiences():

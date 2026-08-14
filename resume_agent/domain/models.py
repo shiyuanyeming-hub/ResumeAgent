@@ -104,10 +104,44 @@ class CareerTarget(BaseModel):
 
 class CandidateProfile(BaseModel):
     name: str = ""
+    name_kana: str = ""
     email: str = ""
     phone: str = ""
     location: str = ""
     links: List[str] = Field(default_factory=list)
+    birth: str = ""
+    address: str = ""
+    nearest_station: str = ""
+    photo_note: str = ""
+
+
+class Education(BaseModel):
+    """One 学歴 entry for the Japanese rirekisho."""
+
+    school: str = ""
+    school_ja: str = ""
+    major: str = ""
+    major_ja: str = ""
+    degree: str = ""
+    degree_ja: str = ""
+    start: str = ""
+    end: str = ""
+
+
+class Certification(BaseModel):
+    """One 免許・資格 entry."""
+
+    name: str = ""
+    name_ja: str = ""
+    date: str = ""
+
+
+class JapanExtra(BaseModel):
+    """Japanese-only resume fields (motivation, self PR, preferences)."""
+
+    motivation: str = ""
+    self_pr: str = ""
+    desired_position: str = ""
 
 
 class FactProposal(BaseModel):
@@ -126,6 +160,9 @@ class CareerFactBase(BaseModel):
     profile: CandidateProfile = Field(default_factory=CandidateProfile)
     target: CareerTarget = Field(default_factory=CareerTarget)
     experiences: List[Experience] = Field(default_factory=list)
+    education: List[Education] = Field(default_factory=list)
+    certifications: List[Certification] = Field(default_factory=list)
+    japan_extra: JapanExtra = Field(default_factory=JapanExtra)
     confirmed_proposal_ids: Set[UUID] = Field(default_factory=set)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)

@@ -34,3 +34,7 @@ class ResumeRenderService:
 
     def export(self, version_id: UUID, format: RenderFormat) -> ExportedFile:
         return self.exporter.export(self.preview(version_id), format)
+
+    def export_secondary(self, version_id: UUID, format: RenderFormat) -> ExportedFile:
+        """Export the Japanese 履歴書 companion document."""
+        return self.exporter.export_secondary(self.preview(version_id), format)

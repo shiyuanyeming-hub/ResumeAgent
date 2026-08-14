@@ -19,6 +19,7 @@ from resume_agent.rendering.models import (
     RenderWarning,
 )
 from resume_agent.rendering.styles import default_style, get_theme
+from resume_agent.rendering.wareki import to_wareki_date
 
 
 DIMENSION_ORDER = (
@@ -253,6 +254,10 @@ class ResumeRenderer:
     def _period(start: str, end: str, locale: str) -> str:
         if not start and not end:
             return ""
+        if locale == "ja":
+            normalized_start = to_wareki_date(start) if start else ""
+            normalized_end = to_wareki_date(end) if end else COPY["ja"]["present"]
+            return f"{normalized_start} 〜 {normalized_end}".strip()
         normalized_start = start.replace("-", ".") if start else ""
         normalized_end = end.replace("-", ".") if end else COPY[locale]["present"]
         return f"{normalized_start} – {normalized_end}".strip()

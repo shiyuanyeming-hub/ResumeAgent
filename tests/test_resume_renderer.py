@@ -72,6 +72,29 @@ def test_renderer_uses_selected_order_and_excludes_unverified():
     assert "将周报耗时从四小时降到三十分钟" in result.markdown
 
 
+def test_renderer_uses_wareki_dates_for_japanese():
+    base, first, _ = evidence_fixture()
+    first.start = "2023-01"
+    first.end = "2024-03"
+    version = make_version(base, [first], locale="ja")
+
+    result = ResumeRenderer().render(base, version)
+
+    assert result.experiences[0].period == "令和5年1月 〜 令和6年3月"
+    assert "令和5年1月" in result.markdown
+    assert "令和5年1月" in result.html
+
+
+def test_renderer_keeps_western_dates_for_chinese_and_english():
+    base, first, _ = evidence_fixture()
+    first.start = "2023-01"
+    first.end = "2024-03"
+    for locale, expected in [("zh", "2023.01 – 2024.03"), ("en", "2023.01 – 2024.03")]:
+        version = make_version(base, [first], locale=locale)
+        result = ResumeRenderer().render(base, version)
+        assert result.experiences[0].period == expected
+
+
 def test_renderer_only_includes_selected_experiences():
     base, first, second = evidence_fixture()
     version = make_version(base, [second])

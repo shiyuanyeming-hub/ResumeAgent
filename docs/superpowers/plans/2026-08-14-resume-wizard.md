@@ -1508,7 +1508,7 @@ class QuestionnaireEngine:
             return self._card(
                 f"education:{education.id}:courses", "education",
                 QuestionKind.MULTI_CHOICE, "勾选或添加核心课程（可跳过）",
-                options=self._provider("courses", base, state),
+                options=list(state.course_options),
             )
         return self._card(
             "education:more", "education", QuestionKind.CHOICE,
@@ -1572,7 +1572,7 @@ class QuestionnaireEngine:
         return self._card(
             "skills:tags", "skills", QuestionKind.MULTI_CHOICE,
             "勾选或添加你的技能标签（可跳过）",
-            options=self._provider("skills", base, state),
+            options=list(state.skill_options),
             values=list(base.profile.skills),
         )
 
@@ -2984,6 +2984,12 @@ def test_skills_options_merge_linked_and_advisor():
     experience = base.add_experience("星河科技", "实习生")
     experience.linked_skills = ["Excel"]
     experience.start = "2024-06"
+    experience.statements[QualityDimension.CONTEXT] = [
+        FactValue(text="业务需要留存分析", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.RESPONSIBILITY] = [
+        FactValue(text="负责看板搭建", confidence=ConfidenceStatus.CONFIRMED)
+    ]
     experience.statements[QualityDimension.ACTION] = [
         FactValue(text="用 SQL 写查询", confidence=ConfidenceStatus.CONFIRMED)
     ]
@@ -3264,8 +3270,6 @@ import 补 `from resume_agent.agents.specialists import StructuredCourseAgent, S
         QuestionnaireEngine(
             options_providers={
                 "majors": lambda base, state: catalog_majors(),
-                "courses": lambda base, state: list(state.course_options),
-                "skills": lambda base, state: list(state.skill_options),
             }
         ),
         course_advisor=course_advisor,

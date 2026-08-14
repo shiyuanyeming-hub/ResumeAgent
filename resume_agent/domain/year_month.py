@@ -11,5 +11,7 @@ def is_year_month(value: str) -> bool:
 
 
 def year_month_le(start: str, end: str) -> bool:
-    """Compare two valid YYYY-MM strings; returns start <= end."""
+    """Compare two YYYY-MM strings; raises ValueError on invalid input."""
+    if not is_year_month(start) or not is_year_month(end):
+        raise ValueError("year_month_le requires valid YYYY-MM strings")
     return start <= end

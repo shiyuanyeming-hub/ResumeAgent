@@ -141,7 +141,12 @@ def test_questionnaire_state_roundtrip(tmp_path):
     state = QuestionnaireState(fact_base_id=fact_base_id)
     state.skipped.append("profile:links")
     state.completed_sections.append("education")
+    state.edited_education_id = uuid4()
+    state.edited_experience_id = uuid4()
     repository.save(state)
     loaded = repository.get(fact_base_id)
     assert loaded.skipped == ["profile:links"]
     assert loaded.completed_sections == ["education"]
+    assert loaded.edited_education_id == state.edited_education_id
+    assert loaded.edited_experience_id == state.edited_experience_id
+    assert loaded.updated_at == state.updated_at

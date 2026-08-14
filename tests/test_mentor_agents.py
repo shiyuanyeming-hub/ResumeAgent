@@ -224,3 +224,23 @@ def test_structured_audit_rejects_next_question_with_two_marks():
     session, base = make_session_and_base()
     proposal = agent.propose("a", session, base, predicted_dimension=QualityDimension.RESULT)
     assert proposal.next_question == ""
+
+
+def test_structured_audit_rejects_next_question_without_mark():
+    runner = QueueRunner([
+        '{"dimension":"action","values":[{"text":"a"}],'
+        '"next_question":"没有问号的下一问"}',
+        '{"dimension":"action","values":[{"text":"a"}],"next_question":""}',
+    ])
+    agent = StructuredFactAuditAgent(runner)
+    session, base = make_session_and_base()
+    proposal = agent.propose("a", session, base, predicted_dimension=QualityDimension.RESULT)
+    assert proposal.next_question == ""
+
+
+def test_stub_audit_returns_empty_next_question_without_prediction():
+    from tests.fakes import StubAuditAgent
+    agent = StubAuditAgent()
+    session, base = make_session_and_base()
+    proposal = agent.propose("我搭了看板", session, base)
+    assert proposal.next_question == ""

@@ -1,6 +1,6 @@
 from copy import deepcopy
 from threading import RLock
-from typing import Iterable
+from typing import Iterable, Optional
 from uuid import UUID
 
 from resume_agent.domain.models import (
@@ -94,7 +94,7 @@ class StubAuditAgent:
         message: str,
         session: InterviewSession,
         base: CareerFactBase,
-        predicted_dimension=None,
+        predicted_dimension: Optional[QualityDimension] = None,
     ) -> FactProposal:
         return FactProposal(
             fact_base_revision=base.revision,

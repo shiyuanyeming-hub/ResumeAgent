@@ -40,7 +40,9 @@ class FactAuditPayload(BaseModel):
     def validate_single_next_question(cls, value: str) -> str:
         stripped = value.strip()
         if stripped and stripped.count("?") + stripped.count("？") != 1:
-            raise ValueError("next_question must contain exactly one question mark")
+            raise ValueError(
+                "next_question must be empty or contain exactly one question mark"
+            )
         return stripped
 
 

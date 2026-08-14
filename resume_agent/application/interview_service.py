@@ -250,6 +250,8 @@ class InterviewService:
             ),
         )
         if plan is None:
+            session.pending_next_text = ""
+            session.pending_next_dimension = None
             return None
         if (
             session.pending_next_text

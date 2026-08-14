@@ -979,9 +979,10 @@ async function submitAnswer(event) {
     if (!session || !isCurrentExperienceContext(context)) return;
     const messagesBox = byId("chat-messages");
     messagesBox.append(element("div", "message user-message", message));
-    typing = element("div", "message assistant-message typing-message", "导师正在提炼…");
+    typing = element("div", "message assistant-message typing-message");
     typing.setAttribute("aria-live", "polite");
     messagesBox.append(typing);
+    typing.textContent = "导师正在提炼";
     messagesBox.scrollTop = messagesBox.scrollHeight;
     await api.answer(session.id, message);
     if (!isCurrentExperienceContext(context)) return;

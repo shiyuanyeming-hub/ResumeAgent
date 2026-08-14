@@ -93,6 +93,10 @@ def test_year_month_helpers():
     assert not is_year_month("2023/09")
     assert not is_year_month("2023-13")
     assert year_month_le("2023-09", "2024-01")
+    with pytest.raises(ValueError):
+        year_month_le("2023-9", "2024-01")
+    with pytest.raises(ValueError):
+        year_month_le("2023-09", "2024-1")
 
 
 def test_experience_defaults_to_work_type():

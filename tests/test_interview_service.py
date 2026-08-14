@@ -196,8 +196,8 @@ def test_answer_receives_predicted_dimension_excluding_asked():
     )
     service.sessions.save(session)
     service.answer(session.id, "我搭了看板")
-    assert audit.predicted == [QualityDimension.RESULT] or audit.predicted[0] != QualityDimension.ACTION
-    assert audit.predicted[0] is not None
+    # 空经历所有维度同分时 planner 取枚举序第一个（CONTEXT）；排除所问 ACTION 后即为 CONTEXT
+    assert audit.predicted == [QualityDimension.CONTEXT]
 
 
 def test_confirm_uses_prewritten_question_without_writer_call():
@@ -214,11 +214,28 @@ def test_confirm_uses_prewritten_question_without_writer_call():
     assert updated.pending_next_dimension is None
 
 
+def test_confirm_falls_back_to_writer_on_dimension_mismatch():
+    service, session, _, writer = interview_fixture()
+    service.answer(session.id, "我搭了看板")
+    stored = service.get_session(session.id)
+    proposal = list(stored.pending_proposals.values())[0]
+    # 人为制造不匹配：把 pending 维度改成已跳过的维度，planner 必不会选中它
+    stored.pending_next_dimension = QualityDimension.EVIDENCE
+    stored.skipped_dimensions.add(QualityDimension.EVIDENCE)
+    service.sessions.save(stored)
+    turn = service.confirm(stored.id, proposal.id)
+    assert turn.question is not None
+    assert turn.question.text != "这条行动的结果是什么？"
+    assert writer.calls == 1
+
+
 def test_reject_clears_pending_next_question():
     service, session, _, writer = interview_fixture()
     service.answer(session.id, "我搭了看板")
     stored = service.get_session(session.id)
     proposal = list(stored.pending_proposals.values())[0]
-    service.reject(stored.id, proposal.id)
+    rejected = service.reject(stored.id, proposal.id)
+    assert rejected.pending_next_text == ""
+    assert rejected.pending_next_dimension is None
     service.next_question(session.id)
     assert writer.calls == 1

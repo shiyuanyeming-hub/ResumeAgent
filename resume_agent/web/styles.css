@@ -341,17 +341,13 @@ dialog p { color: var(--muted); line-height: 1.6; }
   opacity: 0.75;
 }
 .typing-message::after {
-  content: "";
+  content: "…";
   display: inline-block;
-  width: 1em;
-  text-align: left;
-  animation: typing-dots 1.2s steps(4, end) infinite;
+  animation: typing-pulse 1.2s ease-in-out infinite;
 }
-@keyframes typing-dots {
-  0% { content: ""; }
-  25% { content: "."; }
-  50% { content: ".."; }
-  75% { content: "..."; }
+@keyframes typing-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
 }
 
 .section-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }

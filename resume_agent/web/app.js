@@ -651,12 +651,13 @@ async function submitAnswer(event) {
   const submit = event.currentTarget.querySelector("button[type=submit]");
   submit.disabled = true;
   submit.textContent = "正在发送…";
+  let typing = null;
   try {
     const session = await ensureSession(context);
     if (!session || !isCurrentExperienceContext(context)) return;
     const messagesBox = byId("chat-messages");
     messagesBox.append(element("div", "message user-message", message));
-    const typing = element("div", "message assistant-message typing-message", "导师正在提炼…");
+    typing = element("div", "message assistant-message typing-message", "导师正在提炼…");
     typing.setAttribute("aria-live", "polite");
     messagesBox.append(typing);
     messagesBox.scrollTop = messagesBox.scrollHeight;
@@ -667,6 +668,7 @@ async function submitAnswer(event) {
     if (!isCurrentExperienceContext(context)) return;
     currentSession = updated;
     renderConversation();
+    typing = null;
   } catch (error) {
     if (!isCurrentExperienceContext(context)) return;
     if (error instanceof ApiError && error.category === "unavailable") {
@@ -677,6 +679,7 @@ async function submitAnswer(event) {
       renderConversation();
       input.value = "";
     } else {
+      if (typing) typing.remove();
       showToast(error instanceof ApiError ? error.message : "回答发送失败");
     }
   } finally {

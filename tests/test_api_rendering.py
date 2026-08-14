@@ -105,6 +105,52 @@ def test_rendering_reports_not_found_and_invalid_format(client):
     assert invalid.status_code == 422
 
 
+def test_japanese_version_exports_rirekisho_secondary_document(client):
+    base = client.post("/fact-bases", json={}).json()
+    base = client.patch(
+        f"/fact-bases/{base['id']}/profile",
+        json={
+            "name": "王明",
+            "name_kana": "オウ メイ",
+            "birth": "2002-03-15",
+            "address": "東京都新宿区",
+            "nearest_station": "新宿駅",
+        },
+    ).json()
+    version = client.post(
+        f"/fact-bases/{base['id']}/versions",
+        json={"name": "日文版本", "locale": "ja", "selected_experience_ids": []},
+    ).json()
+
+    preview = client.get(f"/versions/{version['id']}/preview").json()
+    assert preview["secondary_title"] == "履歴書"
+    assert "オウ メイ" in preview["secondary_markdown"]
+    assert "平成14年3月15日" in preview["secondary_markdown"]
+
+    response = client.get(
+        f"/versions/{version['id']}/export", params={"format": "md", "doc": "rirekisho"}
+    )
+    assert response.status_code == 200
+    assert "履歴書" in response.text
+    assert "rirekisho" in response.headers["content-disposition"]
+
+    # 非法 doc 值应被校验拒绝
+    invalid = client.get(
+        f"/versions/{version['id']}/export", params={"format": "md", "doc": "unknown"}
+    )
+    assert invalid.status_code == 422
+
+
+def test_non_japanese_export_rejects_rirekisho_document(client):
+    version = create_populated_version(client)
+
+    response = client.get(
+        f"/versions/{version['id']}/export", params={"format": "md", "doc": "rirekisho"}
+    )
+
+    assert response.status_code == 422
+
+
 def test_pdf_engine_failure_maps_to_503(tmp_path):
     app = create_app(
         tmp_path / "resume.db",

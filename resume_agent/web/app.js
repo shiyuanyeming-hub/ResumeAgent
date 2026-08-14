@@ -60,6 +60,7 @@ let editMode = false;
 let editorView = "visual";
 let editorTarget = null;
 let currentRenderedVersionId = null;
+let currentDocType = "work";
 let documentCommitGeneration = 0;
 let versionTransitioning = false;
 let languageTransitioning = false;
@@ -858,6 +859,7 @@ async function chooseVersion(versionId, { languageGeneration = null } = {}) {
   const intentIsCurrent = () => languageGeneration === null
     || languageGate.isCurrent(languageGeneration);
   versionTransitioning = true;
+  currentDocType = "work";
   renderJdTab();
   renderDocumentToolbar();
   try {
@@ -1008,7 +1010,11 @@ function configureExportLink(id, format, version) {
     link.title = "请先创建岗位版本";
     return;
   }
-  link.href = api.exportUrl(version.id, format);
+  link.href = api.exportUrl(
+    version.id,
+    format,
+    currentDocType === "rirekisho" ? "rirekisho" : undefined,
+  );
   link.classList.remove("disabled");
   link.setAttribute("aria-disabled", "false");
   link.removeAttribute("aria-describedby");
@@ -1037,11 +1043,20 @@ function renderDocumentToolbar() {
     switcher.append(versionSelect);
     if (currentVersion.locale === "ja") {
       const documentTypes = element("div", "document-types");
-      const rirekisho = element("button", "selected", "履歴書");
+      const rirekisho = element("button", "", "履歴書");
       const workHistory = element("button", "", "職務経歴書");
       rirekisho.type = workHistory.type = "button";
-      rirekisho.disabled = true;
-      workHistory.addEventListener("click", () => showToast("当前导出会同时保留日文履历所需信息"));
+      rirekisho.disabled = editMode || documentIsTransitioning();
+      workHistory.disabled = editMode || documentIsTransitioning();
+      const applyDocType = (type) => {
+        if (currentDocType === type) return;
+        currentDocType = type;
+        renderDocument();
+      };
+      rirekisho.addEventListener("click", () => applyDocType("rirekisho"));
+      workHistory.addEventListener("click", () => applyDocType("work"));
+      rirekisho.classList.toggle("selected", currentDocType === "rirekisho");
+      workHistory.classList.toggle("selected", currentDocType !== "rirekisho");
       documentTypes.append(rirekisho, workHistory);
       switcher.append(documentTypes);
     }
@@ -1079,9 +1094,14 @@ function renderDocumentToolbar() {
   }
 
   const editButton = byId("edit-button");
-  editButton.disabled = !currentVersion || documentIsTransitioning();
-  editButton.textContent = !currentVersion ? "先创建岗位版本" : editMode ? "保存编辑" : "编辑简历";
-  editButton.title = currentVersion ? "编辑当前简历草稿" : "请先创建岗位版本";
+  const isRirekisho = currentDocType === "rirekisho";
+  editButton.disabled = !currentVersion || documentIsTransitioning() || isRirekisho;
+  editButton.textContent = !currentVersion
+    ? "先创建岗位版本"
+    : isRirekisho ? "履歴書（只读）" : editMode ? "保存编辑" : "编辑简历";
+  editButton.title = !currentVersion
+    ? "请先创建岗位版本"
+    : isRirekisho ? "履歴書 为表单式文档，暂不支持手动编辑，可导出 PDF/DOCX" : "编辑当前简历草稿";
   const draftBadge = byId("draft-badge");
   draftBadge.hidden = !currentVersion?.manual_html && !currentVersion?.manual_markdown;
   byId("export-prerequisite").hidden = Boolean(currentVersion);
@@ -1126,7 +1146,8 @@ async function renderDocument() {
     for (const warning of rendered.warnings || []) {
       warnings.append(element("div", "preview-warning", warning.message));
     }
-    frame.srcdoc = rendered.html;
+    const isRirekisho = currentDocType === "rirekisho" && rendered.secondary_html;
+    frame.srcdoc = isRirekisho ? rendered.secondary_html : rendered.html;
     empty.hidden = true;
     frame.hidden = false;
   } catch (error) {
@@ -1156,6 +1177,10 @@ function setEditorView(view) {
 function beginEditor() {
   if (!currentVersion || !currentRendered || currentRenderedVersionId !== currentVersion.id) {
     showToast("预览尚未准备好");
+    return;
+  }
+  if (currentDocType === "rirekisho") {
+    showToast("履歴書 为表单式文档，暂不支持手动编辑");
     return;
   }
   editMode = true;
@@ -1249,7 +1274,11 @@ async function resetDraft() {
 function toolExportLink(label, format, prerequisiteId) {
   const link = element("a", "button-link", label);
   link.setAttribute("role", "link");
-  if (currentVersion) link.href = api.exportUrl(currentVersion.id, format);
+  if (currentVersion) link.href = api.exportUrl(
+    currentVersion.id,
+    format,
+    currentDocType === "rirekisho" ? "rirekisho" : undefined,
+  );
   else {
     link.classList.add("disabled");
     link.setAttribute("aria-disabled", "true");

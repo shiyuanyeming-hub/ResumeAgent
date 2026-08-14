@@ -189,8 +189,9 @@ export function createApi(fetchImpl = globalThis.fetch) {
       body: JSON.stringify(draft),
     }),
     previewVersion: (versionId) => request(`/versions/${versionId}/preview`),
-    exportUrl: (versionId, format) => (
-      `/versions/${versionId}/export?format=${encodeURIComponent(format)}`
-    ),
+    exportUrl: (versionId, format, doc) => {
+      const docQuery = doc ? `&doc=${encodeURIComponent(doc)}` : "";
+      return `/versions/${versionId}/export?format=${encodeURIComponent(format)}${docQuery}`;
+    },
   };
 }

@@ -43,6 +43,7 @@ COPY = {
         "summary": "职业概述",
         "target": "求职意向",
         "present": "至今",
+        "selfSummary": "自我评价",
     },
     "en": {
         "title": "Resume",
@@ -137,6 +138,7 @@ class ResumeRenderer:
             experiences=experiences,
             educations=educations,
             skills=skills,
+            self_summary=version.selected_summary,
             markdown=markdown,
             html=rendered_html,
             warnings=warnings,
@@ -322,6 +324,11 @@ class ResumeRenderer:
         if contact_line:
             lines.append(self._markdown_escape(contact_line))
             lines.append("")
+        if version.selected_summary:
+            lines.append(f"## {copy['selfSummary']}")
+            lines.append("")
+            lines.append(self._markdown_escape(version.selected_summary))
+            lines.append("")
         if educations:
             lines.append(f"## {copy['education']}")
             lines.append("")
@@ -383,6 +390,10 @@ class ResumeRenderer:
         .drop-zone.drop-active {{ outline: 2.2pt dashed var(--accent); outline-offset: 2mm; }}
         """
         contact = f'<p class="contact">{escape(contact_line)}</p>' if contact_line else ""
+        summary_section = (
+            f"<h2>{copy['selfSummary']}</h2><p>{escape(version.selected_summary)}</p>"
+            if version.selected_summary else ""
+        )
         education_html = []
         for education in educations:
             meta = " · ".join(
@@ -426,6 +437,7 @@ class ResumeRenderer:
             f'<header><h1>{escape(candidate_name)}</h1>'
             f'<p class="headline">{copy["target"]}：{escape(headline)}</p>'
             f"{contact}</header>"
+            f"{summary_section}"
             f"{education_section}"
             f"{''.join(groups_html)}"
             f"{skills_section}"

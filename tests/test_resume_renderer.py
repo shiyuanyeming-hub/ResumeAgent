@@ -196,3 +196,22 @@ def test_zh_skills_section_uses_profile_skills():
     rendered = ResumeRenderer().render(base, version)
     assert "## 技能" in rendered.markdown
     assert "SQL · Python" in rendered.markdown
+
+
+def test_zh_renders_self_summary_when_selected():
+    base, first, _ = evidence_fixture()
+    version = make_version(base, [first], locale="zh")
+    version.selected_summary = "目标导向，数据驱动。"
+    rendered = ResumeRenderer().render(base, version)
+    assert "## 自我评价" in rendered.markdown
+    assert "目标导向，数据驱动。" in rendered.markdown
+    assert "自我评价" in rendered.html
+    assert rendered.self_summary == "目标导向，数据驱动。"
+
+
+def test_zh_omits_self_summary_when_empty():
+    base, first, _ = evidence_fixture()
+    version = make_version(base, [first], locale="zh")
+    rendered = ResumeRenderer().render(base, version)
+    assert "自我评价" not in rendered.markdown
+    assert rendered.self_summary == ""

@@ -3756,7 +3756,7 @@ def test_collect_fact_texts_uses_selected_experiences():
         FactValue(text="写周报", confidence=ConfidenceStatus.CONFIRMED)
     ]
     version = ResumeVersion(
-        fact_base_id=base.id, name="默认版本",
+        fact_base_id=base.id, name="默认版本", base_revision=0,
         selected_experience_ids=[selected.id],
     )
     texts = collect_fact_texts(base, version)
@@ -3800,7 +3800,7 @@ def test_generate_drops_fabricated_numbers():
         FactValue(text="搭建看板", confidence=ConfidenceStatus.CONFIRMED)
     ]
     version = ResumeVersion(
-        fact_base_id=base.id, name="默认版本",
+        fact_base_id=base.id, name="默认版本", base_revision=0,
         target_role="数据分析师", selected_experience_ids=[experience.id],
     )
     service = SummaryService(FakeSummaryAgent([
@@ -3819,13 +3819,13 @@ def test_generate_keeps_grounded_options():
         FactValue(text="搭建看板", confidence=ConfidenceStatus.CONFIRMED)
     ]
     version = ResumeVersion(
-        fact_base_id=base.id, name="默认版本",
+        fact_base_id=base.id, name="默认版本", base_revision=0,
         target_role="数据分析师", selected_experience_ids=[experience.id],
     )
     grounded = [
         "具备数据类实习经历，熟悉SQL与看板搭建方法，能够快速融入团队协作节奏，适合数据分析岗位。",
         "目标导向，善于拆解业务问题并用数据分析工具推进落地，注重过程记录与结果验证方法。",
-        "学习能力强，乐于承担新挑战，持续在数据分析方向积累实践经验与解决问题的方法论。",
+        "学习能力强，乐于承担新的挑战，持续在数据分析方向积累实践经验与解决问题的方法论。",
     ]
     service = SummaryService(FakeSummaryAgent(grounded))
     assert service.generate(base, version) == grounded

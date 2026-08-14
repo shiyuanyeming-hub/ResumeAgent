@@ -215,3 +215,30 @@ def test_zh_omits_self_summary_when_empty():
     rendered = ResumeRenderer().render(base, version)
     assert "自我评价" not in rendered.markdown
     assert rendered.self_summary == ""
+
+
+from resume_agent.domain.models import VersionSnippet
+
+
+def test_zh_snippet_mode_replaces_auto_bullets():
+    base, first, _ = evidence_fixture()
+    version = make_version(base, [first], locale="zh")
+    snippet = VersionSnippet(text="搭建并维护用户留存看板")
+    version.snippets[first.id] = [snippet]
+    rendered = ResumeRenderer().render(base, version)
+    assert "搭建并维护用户留存看板" in rendered.markdown
+    assert "搭建用户留存看板" not in rendered.markdown
+    assert f'data-section="experience:{first.id}"' in rendered.html
+    assert f'data-snippet-id="{snippet.id}"' in rendered.html
+
+
+def test_zh_custom_snippets_render_and_drop_zone_exists():
+    base, first, _ = evidence_fixture()
+    version = make_version(base, [first], locale="zh")
+    rendered = ResumeRenderer().render(base, version)
+    assert 'data-section="custom"' in rendered.html
+    version.custom_sections = [VersionSnippet(text="一段自由补充内容")]
+    rendered = ResumeRenderer().render(base, version)
+    assert "## 自定义片段" in rendered.markdown
+    assert "一段自由补充内容" in rendered.markdown
+    assert rendered.custom_snippets[0].text == "一段自由补充内容"

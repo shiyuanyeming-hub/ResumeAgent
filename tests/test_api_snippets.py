@@ -80,3 +80,32 @@ def test_generate_snippets_without_facts_is_empty(tmp_path):
         )
     assert response.status_code == 200
     assert response.json()["snippets"] == []
+
+
+def test_add_and_remove_version_snippet(tmp_path):
+    app = create_app(tmp_path / "resume-agent.db")
+    with TestClient(app) as client:
+        base = client.post(
+            "/fact-bases", json={"target": {"role": "数据分析师"}}
+        ).json()
+        version = client.post(
+            f"/fact-bases/{base['id']}/versions",
+            json={"name": "默认版本", "locale": "zh", "selected_experience_ids": []},
+        ).json()
+        added = client.post(
+            f"/versions/{version['id']}/snippets",
+            json={"experience_id": None, "text": "一段自由补充内容", "source_fact_ids": []},
+        )
+        assert added.status_code == 200
+        snippet = added.json()["custom_sections"][0]
+        assert snippet["text"] == "一段自由补充内容"
+        duplicate = client.post(
+            f"/versions/{version['id']}/snippets",
+            json={"experience_id": None, "text": "一段自由补充内容", "source_fact_ids": []},
+        )
+        assert duplicate.status_code == 422
+        removed = client.delete(
+            f"/versions/{version['id']}/snippets/{snippet['id']}"
+        )
+        assert removed.status_code == 200
+        assert removed.json()["custom_sections"] == []

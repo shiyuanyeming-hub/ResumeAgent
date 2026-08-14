@@ -90,6 +90,12 @@ class SummarySetRequest(BaseModel):
     text: str = Field(min_length=1)
 
 
+class VersionSnippetAddRequest(BaseModel):
+    experience_id: Optional[UUID] = None
+    text: str = Field(min_length=1)
+    source_fact_ids: List[UUID] = Field(default_factory=list)
+
+
 class ExperienceUpdateRequest(BaseModel):
     organization: Optional[str] = None
     role: Optional[str] = None

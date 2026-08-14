@@ -33,6 +33,7 @@ from resume_agent.api.schemas import (
     VersionCreateRequest,
     VersionDraftRequest,
     VersionRenameRequest,
+    VersionSnippetAddRequest,
     VersionStyleRequest,
 )
 from resume_agent.application.fact_base_service import FactBaseService
@@ -647,6 +648,19 @@ def create_app(
     @app.put("/versions/{version_id}/summary")
     def set_version_summary(version_id: UUID, payload: SummarySetRequest):
         return container.versions.set_summary(version_id, payload.text)
+
+    @app.post("/versions/{version_id}/snippets")
+    def add_version_snippet(version_id: UUID, payload: VersionSnippetAddRequest):
+        return container.versions.add_snippet(
+            version_id,
+            payload.experience_id,
+            payload.text,
+            payload.source_fact_ids,
+        )
+
+    @app.delete("/versions/{version_id}/snippets/{snippet_id}")
+    def delete_version_snippet(version_id: UUID, snippet_id: UUID):
+        return container.versions.remove_snippet(version_id, snippet_id)
 
     @app.post(
         "/versions/{version_id}/activate",

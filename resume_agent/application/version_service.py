@@ -7,6 +7,7 @@ from resume_agent.application.ports import VersionRepository
 from resume_agent.domain.models import (
     CareerFactBase,
     ResumeVersion,
+    VersionSnippet,
     VersionStatus,
     utc_now,
 )
@@ -115,6 +116,47 @@ class VersionService:
     def set_summary(self, version_id: UUID, text: str) -> ResumeVersion:
         version = self.repository.get(version_id)
         version.selected_summary = text.strip()
+        return self.save(version)
+
+    def add_snippet(
+        self,
+        version_id: UUID,
+        experience_id: Optional[UUID],
+        text: str,
+        source_fact_ids: Optional[List[UUID]] = None,
+    ) -> ResumeVersion:
+        version = self.repository.get(version_id)
+        snippet = VersionSnippet(
+            text=text, source_fact_ids=list(source_fact_ids or [])
+        )
+        if experience_id is None:
+            if any(item.text == snippet.text for item in version.custom_sections):
+                raise ValueError("该片段已在简历中")
+            version.custom_sections.append(snippet)
+        else:
+            # 经历未选入当前版本时自动选入（spec §8.3 落点规则）
+            if experience_id not in version.selected_experience_ids:
+                version.selected_experience_ids = (
+                    list(version.selected_experience_ids) + [experience_id]
+                )
+            snippets = version.snippets.setdefault(experience_id, [])
+            if any(item.text == snippet.text for item in snippets):
+                raise ValueError("该片段已在简历中")
+            snippets.append(snippet)
+        return self.save(version)
+
+    def remove_snippet(self, version_id: UUID, snippet_id: UUID) -> ResumeVersion:
+        version = self.repository.get(version_id)
+        for experience_id in list(version.snippets.keys()):
+            version.snippets[experience_id] = [
+                item for item in version.snippets[experience_id]
+                if item.id != snippet_id
+            ]
+            if not version.snippets[experience_id]:
+                del version.snippets[experience_id]
+        version.custom_sections = [
+            item for item in version.custom_sections if item.id != snippet_id
+        ]
         return self.save(version)
 
     def activate(self, version_id: UUID) -> ResumeVersion:

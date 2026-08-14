@@ -20,6 +20,7 @@ class RenderedExperience(BaseModel):
     period: str
     bullets: list[str] = Field(default_factory=list)
     type: ExperienceType = ExperienceType.WORK
+    snippet_ids: List[UUID] = Field(default_factory=list)
 
 
 class RenderedEducation(BaseModel):

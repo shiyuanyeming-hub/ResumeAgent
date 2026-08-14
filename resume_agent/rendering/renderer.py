@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import re
 from collections.abc import Iterable
+from uuid import UUID
 
 from resume_agent.domain.models import (
     CareerFactBase,
@@ -139,6 +140,7 @@ class ResumeRenderer:
             educations=educations,
             skills=skills,
             self_summary=version.selected_summary,
+            custom_snippets=version.custom_sections,
             markdown=markdown,
             html=rendered_html,
             warnings=warnings,
@@ -165,7 +167,7 @@ class ResumeRenderer:
         has_estimates = False
         for experience_id in ordered_ids:
             experience = by_id[experience_id]
-            bullets, experience_has_estimates = self._bullets(experience)
+            bullets, experience_has_estimates, snippet_ids = self._bullets(experience, version)
             has_estimates = has_estimates or experience_has_estimates
             rendered.append(
                 RenderedExperience(
@@ -179,12 +181,16 @@ class ResumeRenderer:
                     ),
                     bullets=bullets,
                     type=experience.type,
+                    snippet_ids=snippet_ids,
                 )
             )
         return rendered, has_estimates
 
     @staticmethod
-    def _bullets(experience: Experience) -> tuple[list[str], bool]:
+    def _bullets(experience: Experience, version: ResumeVersion) -> tuple[list[str], bool, list[UUID]]:
+        snippets = version.snippets.get(experience.id)
+        if snippets:
+            return [snippet.text for snippet in snippets], False, [snippet.id for snippet in snippets]
         bullets: list[str] = []
         seen = set()
         has_estimates = False
@@ -198,7 +204,7 @@ class ResumeRenderer:
                 if value.text not in seen:
                     seen.add(value.text)
                     bullets.append(value.text)
-        return bullets, has_estimates
+        return bullets, has_estimates, []
 
     @staticmethod
     def _collect_skills(
@@ -364,6 +370,13 @@ class ResumeRenderer:
             lines.append("")
             lines.append(" · ".join(self._markdown_escape(item) for item in skills))
             lines.append("")
+        if version.custom_sections:
+            lines.append("## 自定义片段")
+            lines.append("")
+            lines.extend(
+                f"- {self._markdown_escape(item.text)}" for item in version.custom_sections
+            )
+            lines.append("")
         return "\n".join(lines).strip() + "\n"
 
     def _zh_html(self, theme, candidate_name, headline, contact_line,
@@ -388,6 +401,7 @@ class ResumeRenderer:
         .skill {{ display:inline-block; background:var(--tint); border:.5pt solid var(--border); border-radius:2.5mm; padding:.5mm 2.2mm; margin:.5mm; color:var(--accent); font-size:9pt; }}
         .drop-zone {{ border-radius:3mm; transition: outline .1s; }}
         .drop-zone.drop-active {{ outline: 2.2pt dashed var(--accent); outline-offset: 2mm; }}
+        .snippet-remove {{ border: none; background: transparent; color: #9aa3ad; cursor: pointer; margin-left: 1mm; font-size: 8.5pt; }}
         """
         contact = f'<p class="contact">{escape(contact_line)}</p>' if contact_line else ""
         summary_section = (
@@ -419,8 +433,12 @@ class ResumeRenderer:
                 meta = " · ".join(
                     item for item in (experience.organization, experience.period) if item
                 )
+                ids = experience.snippet_ids + [None] * max(
+                    0, len(experience.bullets) - len(experience.snippet_ids)
+                )
                 bullets = "".join(
-                    f"<li>{escape(item)}</li>" for item in experience.bullets
+                    self._bullet_html(item, snippet_id)
+                    for item, snippet_id in zip(experience.bullets, ids)
                 )
                 section_html.append(
                     f'<section class="experience drop-zone" data-section="experience:{experience.id}">'
@@ -433,6 +451,16 @@ class ResumeRenderer:
         education_section = (
             f"<h2>{copy['education']}</h2>{''.join(education_html)}" if educations else ""
         )
+        custom_items = "".join(
+            self._bullet_html(item.text, item.id) for item in version.custom_sections
+        )
+        custom_drop = (
+            '<section class="drop-zone custom-snippets" data-section="custom">'
+            '<h2>自定义片段</h2>'
+            + (f"<ul>{custom_items}</ul>" if custom_items
+               else '<p class="meta">可将片段卡拖到此处，形成简历的自定义内容。</p>')
+            + "</section>"
+        )
         body = (
             f'<header><h1>{escape(candidate_name)}</h1>'
             f'<p class="headline">{copy["target"]}：{escape(headline)}</p>'
@@ -441,6 +469,7 @@ class ResumeRenderer:
             f"{education_section}"
             f"{''.join(groups_html)}"
             f"{skills_section}"
+            f"{custom_drop}"
         )
         return (
             "<!DOCTYPE html>\n"
@@ -448,6 +477,17 @@ class ResumeRenderer:
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{escape(copy["title"])}</title><style>{css}</style></head>'
             f"<body>{body}</body></html>"
+        )
+
+    @staticmethod
+    def _bullet_html(text, snippet_id):
+        escaped = html.escape(text, quote=True)
+        if snippet_id is None:
+            return f"<li>{escaped}</li>"
+        return (
+            f'<li class="snippet" data-snippet-id="{snippet_id}">{escaped}'
+            f'<button class="snippet-remove" data-snippet-id="{snippet_id}" '
+            f'type="button" aria-label="删除片段">✕</button></li>'
         )
 
     def _markdown(

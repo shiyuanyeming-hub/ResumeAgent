@@ -3416,6 +3416,12 @@ import 补 `ExperienceType`、`RenderedEducation`。
 
 ```python
         educations = self._resolve_educations(base)
+        skills = self._collect_skills(base, version)
+        if version.locale == "zh":
+            for skill in base.profile.skills:
+                normalized = skill.strip()
+                if normalized and normalized not in skills:
+                    skills.append(normalized)
 ```
 
 `RenderedExperience` 构造中补 `id=experience.id, type=experience.type,`；返回的 `RenderedResume(...)` 构造中补 `educations=educations,`。

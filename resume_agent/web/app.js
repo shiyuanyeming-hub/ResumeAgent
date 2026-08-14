@@ -425,46 +425,43 @@ function renderOnboarding() {
   panel.replaceChildren();
   const heading = element("div", "section-heading");
   heading.append(
-    element("h2", "", "先建立一份档案"),
-    element("p", "", "只需填目标岗位；其余信息由向导逐步提问收集。"),
+    element("h2", "", "你要做一份什么样的简历？"),
+    element("p", "", "先选择简历语言。中文向导已就绪，日文与英文即将支持。"),
   );
 
-  const form = element("form", "onboarding-form");
-  form.id = "onboarding-form";
-  form.append(
-    field("目标岗位", "role", "例如：数据分析师"),
-    field("目标国家或地区（可选）", "country", "例如：日本"),
-  );
-  const submit = element("button", "primary", "创建档案并开始");
-  submit.type = "submit";
-  form.append(submit);
-  form.addEventListener("submit", handleOnboarding);
-  panel.append(heading, form);
+  const choices = element("div", "language-choices");
+  for (const [locale, label] of [
+    ["zh", "中文简历"],
+    ["ja", "日文简历"],
+    ["en", "英文简历"],
+  ]) {
+    const button = element("button", "primary language-choice", label);
+    button.type = "button";
+    button.addEventListener("click", () => chooseLanguage(locale));
+    choices.append(button);
+  }
+  panel.append(heading, choices);
   byId("chat-composer").hidden = true;
 }
 
-async function handleOnboarding(event) {
-  event.preventDefault();
-  const form = new FormData(event.currentTarget);
-  const role = String(form.get("role") || "").trim();
-  const country = String(form.get("country") || "").trim();
-  if (!role) {
-    showToast("请填写目标岗位");
+async function chooseLanguage(locale) {
+  if (locale !== "zh") {
+    showToast("日文与英文向导即将支持，敬请期待");
     return;
   }
-  const submit = event.currentTarget.querySelector("button[type=submit]");
-  submit.disabled = true;
+  state.locale = "zh";
+  saveState();
   try {
     const base = await api.createFactBase({
-      role,
-      country,
+      role: "",
+      country: "",
       languages: ["zh", "ja", "en"],
     });
     await activateBase(base);
     if (currentBase?.id === base.id && versions.length === 0) {
       const version = await api.createVersion(base.id, {
-        name: defaultZhVersionName(role),
-        target_role: role,
+        name: defaultZhVersionName(""),
+        target_role: "",
         company: "",
         raw_jd: "",
         locale: "zh",
@@ -475,7 +472,6 @@ async function handleOnboarding(event) {
     }
   } catch (error) {
     showToast(error instanceof ApiError ? error.message : "档案创建失败");
-    submit.disabled = false;
   }
 }
 

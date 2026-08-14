@@ -145,6 +145,27 @@ export function createApi(fetchImpl = globalThis.fetch) {
     searchSchools: (query) => request(
       `/schools/search?q=${encodeURIComponent(query)}&limit=8`,
     ),
+    photoUrl: (factBaseId) => `/fact-bases/${factBaseId}/photo`,
+    uploadPhoto: async (factBaseId, file) => {
+      const body = new FormData();
+      body.append("photo", file);
+      const response = await fetch(`/fact-bases/${factBaseId}/photo`, {
+        method: "PUT",
+        body,
+      });
+      if (!response.ok) {
+        let message = ERROR_COPY[errorCategory(response.status)] || "照片上传失败";
+        try {
+          const payload = await response.json();
+          if (payload?.detail) message = String(payload.detail);
+        } catch { /* keep default message */ }
+        throw new ApiError(response.status, errorCategory(response.status), message);
+      }
+      return response.json();
+    },
+    deletePhoto: (factBaseId) => request(`/fact-bases/${factBaseId}/photo`, {
+      method: "DELETE",
+    }),
     answerQuestion: (factBaseId, payload) => request(
       `/fact-bases/${factBaseId}/questionnaire/answer`,
       { method: "POST", body: JSON.stringify(payload) },

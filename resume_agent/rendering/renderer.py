@@ -70,6 +70,7 @@ class ResumeRenderer:
         self,
         base: CareerFactBase,
         version: ResumeVersion,
+        photo_data_uri: str = "",
     ) -> RenderedResume:
         if base.id != version.fact_base_id:
             raise ValueError("version does not belong to fact base")
@@ -111,6 +112,7 @@ class ResumeRenderer:
             skills,
             educations,
             version,
+            photo_data_uri,
         )
         rendered_html = self._html(
             version.locale,
@@ -123,6 +125,7 @@ class ResumeRenderer:
             skills,
             educations,
             version,
+            photo_data_uri,
         )
         return RenderedResume(
             version_id=version.id,
@@ -297,6 +300,11 @@ class ResumeRenderer:
         return escaped
 
     def _resolve_educations(self, base):
+        ordered = sorted(
+            base.educations,
+            key=lambda education: education.start or "",
+            reverse=True,
+        )
         return [
             RenderedEducation(
                 school=education.school,
@@ -304,8 +312,12 @@ class ResumeRenderer:
                 degree=education.degree,
                 period=self._period(education.start, education.end or "", "zh"),
                 courses=list(education.core_courses),
+                gpa=education.gpa,
+                rank=education.rank,
+                research_direction=education.research_direction,
+                thesis=education.thesis,
             )
-            for education in base.educations
+            for education in ordered
         ]
 
     @staticmethod
@@ -321,9 +333,12 @@ class ResumeRenderer:
         return work, campus
 
     def _zh_markdown(self, candidate_name, headline, contact_line, summary,
-                     experiences, skills, educations, version):
+                     experiences, skills, educations, version, photo_data_uri=""):
         copy = COPY["zh"]
         lines = [f"# {self._markdown_escape(candidate_name)}", ""]
+        if photo_data_uri:
+            lines.append(f'<img src="{photo_data_uri}" width="130" alt="照片" />')
+            lines.append("")
         if headline:
             lines.append(f"**{copy['target']}：** {self._markdown_escape(headline)}")
             lines.append("")
@@ -345,6 +360,20 @@ class ResumeRenderer:
                 heading = education.school + (f" | {meta}" if meta else "")
                 lines.append(f"### {self._markdown_escape(heading)}")
                 lines.append("")
+                detail = []
+                if education.gpa:
+                    detail.append(f"GPA：{education.gpa}")
+                if education.rank:
+                    detail.append(f"排名：{education.rank}")
+                if education.research_direction:
+                    detail.append(f"研究方向：{education.research_direction}")
+                if education.thesis:
+                    detail.append(f"毕业论文：{education.thesis}")
+                if detail:
+                    lines.append(
+                        " | ".join(self._markdown_escape(item) for item in detail)
+                    )
+                    lines.append("")
                 if education.courses:
                     lines.append(
                         f"{copy['courses']}："
@@ -380,7 +409,7 @@ class ResumeRenderer:
         return "\n".join(lines).strip() + "\n"
 
     def _zh_html(self, theme, candidate_name, headline, contact_line,
-                 experiences, skills, educations, version):
+                 experiences, skills, educations, version, photo_data_uri=""):
         copy = COPY["zh"]
         escape = lambda value: html.escape(value, quote=True)
         css = f"""
@@ -388,10 +417,12 @@ class ResumeRenderer:
         @page {{ size: A4; margin: 14mm 16mm; }}
         * {{ box-sizing: border-box; }}
         body {{ font-family:{theme.font_family}; color:#1f2937; font-size:10pt; line-height:1.58; margin:0; }}
-        header {{ border-bottom:2.2pt solid var(--accent); padding-bottom:3mm; margin-bottom:5mm; }}
+        header {{ border-bottom:2.2pt solid var(--accent); padding-bottom:3mm; margin-bottom:5mm; display:flex; justify-content:space-between; gap:5mm; align-items:center; }}
+        .header-text {{ flex:1; }}
         h1 {{ color:var(--accent); font-size:21pt; margin:0; letter-spacing:.4px; }}
         .headline {{ color:var(--secondary); font-size:10.5pt; margin:1mm 0; }}
         .contact,.meta {{ color:#5f6772; font-size:9pt; margin:.8mm 0; }}
+        .photo {{ width:26mm; height:34mm; object-fit:cover; border-radius:1.5mm; border:.4pt solid var(--border); }}
         h2 {{ color:var(--accent); font-size:11.5pt; border-left:3.5pt solid var(--accent); padding-left:2.5mm; margin:5mm 0 2mm; }}
         h3 {{ font-size:10.5pt; margin:2.5mm 0 .5mm; color:#20252b; }}
         p {{ margin:1mm 0; }}
@@ -404,6 +435,16 @@ class ResumeRenderer:
         .snippet-remove {{ border: none; background: transparent; color: #9aa3ad; cursor: pointer; margin-left: 1mm; font-size: 8.5pt; }}
         """
         contact = f'<p class="contact">{escape(contact_line)}</p>' if contact_line else ""
+        photo_html = (
+            f'<img class="photo" src="{photo_data_uri}" alt="照片" />'
+            if photo_data_uri else ""
+        )
+        header_text = (
+            f'<div class="header-text"><h1>{escape(candidate_name)}</h1>'
+            f'<p class="headline">{copy["target"]}：{escape(headline)}</p>'
+            f"{contact}</div>"
+        )
+        header_html = f"<header>{header_text}{photo_html}</header>"
         summary_section = (
             f"<h2>{copy['selfSummary']}</h2><p>{escape(version.selected_summary)}</p>"
             if version.selected_summary else ""
@@ -413,6 +454,19 @@ class ResumeRenderer:
             meta = " · ".join(
                 item for item in (education.major, education.degree, education.period) if item
             )
+            details = []
+            if education.gpa:
+                details.append(f"GPA：{education.gpa}")
+            if education.rank:
+                details.append(f"排名：{education.rank}")
+            if education.research_direction:
+                details.append(f"研究方向：{education.research_direction}")
+            if education.thesis:
+                details.append(f"毕业论文：{education.thesis}")
+            detail_line = (
+                f'<p class="meta">{" · ".join(escape(item) for item in details)}</p>'
+                if details else ""
+            )
             courses = (
                 f'<p class="meta">{copy["courses"]}：'
                 + "、".join(escape(item) for item in education.courses)
@@ -421,7 +475,7 @@ class ResumeRenderer:
             )
             education_html.append(
                 f'<section class="education"><h3>{escape(education.school)}</h3>'
-                f'<p class="meta">{escape(meta)}</p>{courses}</section>'
+                f'<p class="meta">{escape(meta)}</p>{detail_line}{courses}</section>'
             )
         work, campus = self._zh_group(experiences)
         groups_html = []
@@ -462,9 +516,7 @@ class ResumeRenderer:
             + "</section>"
         )
         body = (
-            f'<header><h1>{escape(candidate_name)}</h1>'
-            f'<p class="headline">{copy["target"]}：{escape(headline)}</p>'
-            f"{contact}</header>"
+            f"{header_html}"
             f"{summary_section}"
             f"{education_section}"
             f"{''.join(groups_html)}"
@@ -501,12 +553,13 @@ class ResumeRenderer:
         skills: list[str],
         educations: list[RenderedEducation],
         version: ResumeVersion,
+        photo_data_uri: str = "",
     ) -> str:
         copy = COPY[locale]
         if locale == "zh":
             return self._zh_markdown(
                 candidate_name, headline, contact_line, summary,
-                experiences, skills, educations, version,
+                experiences, skills, educations, version, photo_data_uri,
             )
         lines = [f"# {self._markdown_escape(candidate_name)}", ""]
         if headline:
@@ -547,6 +600,7 @@ class ResumeRenderer:
         skills,
         educations,
         version,
+        photo_data_uri: str = "",
     ) -> str:
         copy = COPY[locale]
         escape = lambda value: html.escape(value, quote=True)
@@ -587,7 +641,7 @@ class ResumeRenderer:
         if locale == "zh":
             return self._zh_html(
                 theme, candidate_name, headline, contact_line,
-                experiences, skills, educations, version,
+                experiences, skills, educations, version, photo_data_uri,
             )
         body = (
             f'<header><h1>{escape(candidate_name)}</h1>'

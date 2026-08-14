@@ -84,6 +84,10 @@ class EducationCreateRequest(BaseModel):
     start: str = ""
     end: Optional[str] = None
     core_courses: List[str] = Field(default_factory=list)
+    gpa: str = ""
+    rank: str = ""
+    research_direction: str = ""
+    thesis: str = ""
 
 
 class SummarySetRequest(BaseModel):

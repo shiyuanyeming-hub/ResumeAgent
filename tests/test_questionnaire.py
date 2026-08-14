@@ -176,7 +176,7 @@ def test_answer_rejects_bad_period():
     questionnaire.answer(base.id, "profile:email", value="wang@example.com")
     questionnaire.answer(base.id, "profile:phone", value="13800000000")
     questionnaire.answer(base.id, "target:role", value="数据分析师")
-    questionnaire.answer(base.id, "education:add", value="开始填写")
+    questionnaire.answer(base.id, "education:add", value="硕士")
     questionnaire.answer(base.id, "education:new:school", value="某大学")
     loaded = questionnaire.fact_bases.get(base.id)
     education_id = loaded.educations[0].id
@@ -233,18 +233,19 @@ def test_course_options_merge_catalog_and_advisor():
     questionnaire.skip(base.id, "profile:links")
     questionnaire.answer(base.id, "target:role", value="数据分析师")
     questionnaire.skip(base.id, "target:city")
-    questionnaire.answer(base.id, "education:add", value="开始填写")
+    questionnaire.answer(base.id, "education:add", value="硕士")
     questionnaire.answer(base.id, "education:new:school", value="某大学")
     loaded = questionnaire.fact_bases.get(base.id)
     education_id = loaded.educations[0].id
     questionnaire.answer(
         base.id, f"education:{education_id}:major", value="计算机科学与技术"
     )
-    questionnaire.answer(base.id, f"education:{education_id}:degree", value="本科")
     questionnaire.answer(
         base.id, f"education:{education_id}:period",
         extra={"start": "2020-09", "end": ""},
     )
+    for field in ("gpa", "rank", "research", "thesis"):
+        questionnaire.skip(base.id, f"education:{education_id}:{field}")
     card = questionnaire.next_card(base.id)
     assert card.step_id == f"education:{education_id}:courses"
     assert "数据结构" in card.options
@@ -262,7 +263,7 @@ def test_course_answer_strips_ai_suffix():
     questionnaire.answer(base.id, "profile:email", value="wang@example.com")
     questionnaire.answer(base.id, "profile:phone", value="13800000000")
     questionnaire.answer(base.id, "target:role", value="数据分析师")
-    questionnaire.answer(base.id, "education:add", value="开始填写")
+    questionnaire.answer(base.id, "education:add", value="硕士")
     questionnaire.answer(base.id, "education:new:school", value="某大学")
     loaded = questionnaire.fact_bases.get(base.id)
     education_id = loaded.educations[0].id
@@ -436,7 +437,7 @@ def test_engine_role_card_uses_guide_role_options():
 
 
 def test_education_add_answer_advances_to_school_card():
-    """回答「开始填写」后必须推进到学校名称，而不是停在原卡（回归：确认无反应）。"""
+    """回答最高学历后必须推进到学校名称，而不是停在原卡（回归：确认无反应）。"""
     questionnaire, base = make_service()
     questionnaire.answer(base.id, "profile:name", value="王明")
     questionnaire.answer(base.id, "profile:email", value="wang@example.com")
@@ -447,6 +448,70 @@ def test_education_add_answer_advances_to_school_card():
     questionnaire.skip(base.id, "target:city")
     card = questionnaire.next_card(base.id)
     assert card.step_id == "education:add"
-    questionnaire.answer(base.id, "education:add", value="开始填写")
+    questionnaire.answer(base.id, "education:add", value="硕士")
     card = questionnaire.next_card(base.id)
     assert card.step_id == "education:new:school"
+
+
+def test_education_degree_first_flow():
+    """先问最高学历→学校（带学位）→专业→时间→GPA/排名/方向/论文→上一段学历。"""
+    questionnaire, base = make_service()
+    for step_id, value in [
+        ("profile:name", "王明"),
+        ("profile:email", "wang@example.com"),
+        ("profile:phone", "13800000000"),
+        ("target:role", "数据分析师"),
+    ]:
+        questionnaire.answer(base.id, step_id, value=value)
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.skip(base.id, "target:city")
+
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "education:add"
+    assert "博士" in card.options and "硕士" in card.options
+
+    questionnaire.answer(base.id, "education:add", value="硕士")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "education:new:school"
+    assert "硕士" in card.prompt
+
+    questionnaire.answer(base.id, "education:new:school", value="华中科技大学")
+    loaded = questionnaire.fact_bases.get(base.id)
+    education_id = loaded.educations[0].id
+    assert loaded.educations[0].degree == "硕士"
+
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == f"education:{education_id}:major"
+    # 理工类学校：工科专业优先
+    assert card.options[0] == "计算机科学与技术"
+
+    questionnaire.answer(base.id, f"education:{education_id}:major", value="计算机科学与技术")
+    questionnaire.answer(
+        base.id, f"education:{education_id}:period",
+        extra={"start": "2023-09", "end": ""},
+    )
+    questionnaire.answer(base.id, f"education:{education_id}:gpa", value="3.7/4.0")
+    questionnaire.answer(base.id, f"education:{education_id}:rank", value="前10%")
+    questionnaire.answer(base.id, f"education:{education_id}:research", value="数据挖掘")
+    questionnaire.answer(base.id, f"education:{education_id}:thesis", value="基于深度学习的推荐系统")
+    questionnaire.skip(base.id, f"education:{education_id}:courses")
+
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "education:more"
+    questionnaire.answer(base.id, "education:more", value="添加上一段学历")
+
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "education:new:degree"
+    questionnaire.answer(base.id, "education:new:degree", value="本科")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "education:new:school"
+    assert "本科" in card.prompt
+    questionnaire.answer(base.id, "education:new:school", value="某大学")
+
+    loaded = questionnaire.fact_bases.get(base.id)
+    assert [item.degree for item in loaded.educations] == ["硕士", "本科"]
+    assert loaded.educations[0].gpa == "3.7/4.0"
+    assert loaded.educations[0].rank == "前10%"
+    assert loaded.educations[0].research_direction == "数据挖掘"
+    assert loaded.educations[0].thesis == "基于深度学习的推荐系统"

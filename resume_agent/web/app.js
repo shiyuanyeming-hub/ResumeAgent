@@ -789,7 +789,7 @@ function schoolSearchField(card) {
   const input = document.createElement("input");
   input.value = card.value || "";
   input.autocomplete = "off";
-  input.placeholder = "输入学校名、拼音或首字母（如：华中 / huazhong / hz）";
+  input.placeholder = "输入学校名、拼音或首字母（如：清华 / qinghua / qh）";
   const list = element("div", "school-suggestions");
   list.hidden = true;
   let timer = null;
@@ -944,6 +944,7 @@ function renderQuestionCard(card) {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const result = readValue ? readValue() : {};
+    submit.disabled = true;
     answerQuestionCard(card, result);
   });
   article.append(form);
@@ -2050,6 +2051,68 @@ function renderToolsTab() {
       : "导师当前离线，事实库、版本与导出仍可使用。"),
   );
   root.append(service);
+
+  const photo = element("section", "tool-card");
+  photo.append(
+    element("h3", "", "简历照片"),
+    element("p", "", currentBase
+      ? "上传 JPG / PNG / WebP 照片（≤5MB），会显示在简历预览与导出的文档头部。"
+      : "建立档案后可上传照片。"),
+  );
+  const photoActions = element("div", "tool-actions photo-actions");
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = "image/jpeg,image/png,image/webp";
+  fileInput.hidden = true;
+  const uploadButton = element("button", "primary", "上传照片");
+  uploadButton.type = "button";
+  uploadButton.disabled = !currentBase;
+  const photoPreview = element("img", "photo-preview");
+  photoPreview.alt = "简历照片";
+  photoPreview.hidden = !currentBase?.profile?.photo;
+  if (currentBase?.profile?.photo) {
+    photoPreview.src = `${api.photoUrl(currentBase.id)}?t=${Date.now()}`;
+  }
+  const removeButton = element("button", "text-button", "删除照片");
+  removeButton.type = "button";
+  removeButton.hidden = !currentBase?.profile?.photo;
+  uploadButton.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    if (!file || !currentBase) return;
+    uploadButton.disabled = true;
+    uploadButton.textContent = "正在上传…";
+    try {
+      const base = await api.uploadPhoto(currentBase.id, file);
+      cacheBase(base);
+      await renderDocument();
+      showToast("照片已更新");
+      renderToolsTab();
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "照片上传失败");
+      uploadButton.disabled = false;
+      uploadButton.textContent = "上传照片";
+    } finally {
+      fileInput.value = "";
+    }
+  });
+  removeButton.addEventListener("click", async () => {
+    if (!currentBase) return;
+    removeButton.disabled = true;
+    try {
+      const base = await api.deletePhoto(currentBase.id);
+      cacheBase(base);
+      await renderDocument();
+      showToast("照片已删除");
+      renderToolsTab();
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "照片删除失败");
+      removeButton.disabled = false;
+    }
+  });
+  photoActions.append(fileInput, uploadButton, removeButton);
+  photo.append(photoActions, photoPreview);
+  root.append(photo);
 
   const exports = element("section", "tool-card");
   exports.append(element("h3", "", "当前版本导出"));

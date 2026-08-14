@@ -6,7 +6,7 @@ from typing import Optional
 from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import FastAPI, Request, Response, status
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -67,6 +67,10 @@ from resume_agent.domain.models import (
     utc_now,
 )
 from resume_agent.domain.quality import QualityReport, evaluate_experience
+from resume_agent.infrastructure.photo_store import (
+    MAX_PHOTO_BYTES,
+    PhotoStore,
+)
 from resume_agent.infrastructure.sqlite_repositories import (
     SQLiteFactBaseRepository,
     SQLiteQuestionnaireRepository,
@@ -97,6 +101,7 @@ class ServiceContainer:
     summaries: SummaryService
     snippet_agent: object
     capabilities: AgentCapabilityStatus
+    photo_store: object
 
 
 def create_app(
@@ -119,6 +124,7 @@ def create_app(
     fact_base_repository = SQLiteFactBaseRepository(store)
     session_repository = SQLiteSessionRepository(store)
     version_repository = SQLiteVersionRepository(store)
+    photo_store = PhotoStore(Path(database_path).resolve().parent / "photos")
     renderer = resume_renderer or ResumeRenderer()
     exporter = resume_exporter or ResumeExporter()
     if agent_capabilities is not None:
@@ -177,10 +183,12 @@ def create_app(
             version_repository,
             renderer,
             exporter,
+            photo_loader=photo_store.load,
         ),
         summaries=SummaryService(summary_agent),
         snippet_agent=snippet_agent,
         capabilities=capabilities,
+        photo_store=photo_store,
     )
     app = FastAPI(
         title="ResumeAgent API",
@@ -245,6 +253,10 @@ def create_app(
             start=payload.start,
             end=payload.end,
             core_courses=payload.core_courses,
+            gpa=payload.gpa,
+            rank=payload.rank,
+            research_direction=payload.research_direction,
+            thesis=payload.thesis,
         )
         return container.fact_bases.add_education(fact_base_id, education)
 
@@ -266,6 +278,10 @@ def create_app(
             start=payload.start,
             end=payload.end,
             core_courses=payload.core_courses,
+            gpa=payload.gpa,
+            rank=payload.rank,
+            research_direction=payload.research_direction,
+            thesis=payload.thesis,
             created_at=current.created_at,
             updated_at=utc_now(),
         )
@@ -355,6 +371,53 @@ def create_app(
     @app.get("/schools/search", tags=["catalog"])
     def search_schools(q: str = "", limit: int = 8) -> list[dict]:
         return search_school_catalog(q, limit=limit)
+
+    PHOTO_EXTENSIONS = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+    }
+
+    @app.put(
+        "/fact-bases/{fact_base_id}/photo",
+        response_model=CareerFactBase,
+        tags=["fact-bases"],
+    )
+    async def upload_photo(fact_base_id: UUID, photo: UploadFile = File(...)):
+        data = await photo.read()
+        if len(data) > MAX_PHOTO_BYTES:
+            raise HTTPException(status_code=413, detail="照片不能超过 5MB")
+        extension = PHOTO_EXTENSIONS.get(photo.content_type or "")
+        if extension is None:
+            raise HTTPException(
+                status_code=415, detail="仅支持 JPG / PNG / WebP 图片"
+            )
+        filename = container.photo_store.save(fact_base_id, data, extension)
+        return container.fact_bases.set_photo(fact_base_id, filename)
+
+    @app.get("/fact-bases/{fact_base_id}/photo", tags=["fact-bases"])
+    def get_photo(fact_base_id: UUID) -> Response:
+        base = container.fact_bases.get(fact_base_id)
+        if not base.profile.photo:
+            raise HTTPException(status_code=404, detail="尚未上传照片")
+        data = container.photo_store.load(base.profile.photo)
+        if data is None:
+            raise HTTPException(status_code=404, detail="照片文件不存在")
+        return Response(
+            content=data,
+            media_type=container.photo_store.media_type(base.profile.photo),
+        )
+
+    @app.delete(
+        "/fact-bases/{fact_base_id}/photo",
+        response_model=CareerFactBase,
+        tags=["fact-bases"],
+    )
+    def delete_photo(fact_base_id: UUID) -> CareerFactBase:
+        base = container.fact_bases.get(fact_base_id)
+        if base.profile.photo:
+            container.photo_store.delete(base.profile.photo)
+        return container.fact_bases.clear_photo(fact_base_id)
 
     @app.post(
         "/fact-bases",

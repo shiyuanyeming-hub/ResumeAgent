@@ -26,6 +26,11 @@ TARGET_STEPS = [
 
 DEGREE_OPTIONS = ["高中", "大专", "本科", "硕士", "博士"]
 
+# 学历优先的新流程：先问最高学历，再自上而下逐段填写
+FIRST_DEGREE_OPTIONS = ["博士", "硕士", "本科", "专科", "高中及以下"]
+NEXT_DEGREE_OPTIONS = ["博士", "硕士", "本科", "专科"]
+HIGH_SCHOOL_OPTION = "高中及以下"
+
 EXPERIENCE_TYPE_OPTIONS = [
     ("internship", "实习"),
     ("work", "工作"),

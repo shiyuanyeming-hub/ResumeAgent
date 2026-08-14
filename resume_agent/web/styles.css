@@ -400,3 +400,5 @@ dialog p { color: var(--muted); line-height: 1.6; }
   border: none; background: none; cursor: pointer; font-size: 13px;
 }
 .school-suggestion:hover { background: #eff6ff; }
+.photo-preview { width: 84px; height: 110px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border, #d8dde5); margin-top: 10px; }
+.photo-actions { align-items: center; }

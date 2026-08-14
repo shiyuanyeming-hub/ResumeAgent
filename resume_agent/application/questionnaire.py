@@ -15,13 +15,20 @@ from resume_agent.domain.models import (
     ResumeVersion,
     utc_now,
 )
-from resume_agent.domain.course_catalog import courses_for_major
+from resume_agent.domain.course_catalog import (
+    catalog_majors,
+    courses_for_major,
+    majors_for_school,
+)
 from resume_agent.domain.quality import evaluate_experience, evaluate_profile_completeness
 from resume_agent.domain.questionnaire_steps import (
     DEGREE_OPTIONS,
     EDUCATION_DONE_OPTION,
     EXPERIENCE_DONE_OPTION,
     EXPERIENCE_TYPE_OPTIONS,
+    FIRST_DEGREE_OPTIONS,
+    HIGH_SCHOOL_OPTION,
+    NEXT_DEGREE_OPTIONS,
     PROFILE_STEPS,
     SECTION_LABELS,
     SECTION_ORDER,
@@ -135,56 +142,103 @@ class QuestionnaireEngine:
             if self._skipped(state, "education:add"):
                 return None
             if "education:add" in state.answered:
-                return self._card(
-                    "education:new:school", "education", QuestionKind.TEXT,
-                    "学校名称是？", skippable=False,
-                )
+                return self._pending_degree_school_card(state)
             return self._card(
                 "education:add", "education", QuestionKind.CHOICE,
-                "开始填写教育背景？", options=["开始填写"],
+                "你目前的最高学历是？（会从最高学历开始自上而下逐段填写）",
+                options=list(FIRST_DEGREE_OPTIONS), skippable=False,
             )
         if "education" in state.completed_sections:
             return None
+        if state.pending_education_degree:
+            return self._pending_degree_school_card(state)
         education = self._edited_education(base, state)
         if education is None:
             return self._card(
-                "education:new:school", "education", QuestionKind.TEXT,
-                "学校名称是？", skippable=False,
+                "education:new:degree", "education", QuestionKind.CHOICE,
+                "还有一段学历要填写，它的层次是？",
+                options=list(NEXT_DEGREE_OPTIONS), skippable=False,
             )
-        if not education.school and not self._skipped(state, f"education:{education.id}:school"):
-            return self._card(
-                f"education:{education.id}:school", "education", QuestionKind.TEXT,
-                "学校名称是？", skippable=False,
-            )
-        if not education.major and not self._skipped(state, f"education:{education.id}:major"):
-            return self._card(
-                f"education:{education.id}:major", "education", QuestionKind.CHOICE_FREE,
-                "所学专业是？（可选推荐项，也可以自己填）",
-                options=self._provider("majors", base, state),
-            )
-        if not education.degree and not self._skipped(state, f"education:{education.id}:degree"):
-            return self._card(
-                f"education:{education.id}:degree", "education", QuestionKind.CHOICE,
-                "最高学历是？", options=DEGREE_OPTIONS,
-            )
-        if not education.start and not self._skipped(state, f"education:{education.id}:period"):
-            return self._card(
-                f"education:{education.id}:period", "education",
-                QuestionKind.YEAR_MONTH_RANGE,
-                "这段教育的起止时间是？（结束留空表示至今）",
-                extra={"end": education.end or ""},
-            )
-        if not education.core_courses and not self._skipped(state, f"education:{education.id}:courses"):
-            return self._card(
-                f"education:{education.id}:courses", "education",
-                QuestionKind.MULTI_CHOICE, "勾选或添加核心课程（可跳过）",
-                options=list(state.course_options),
-            )
+        card = self._education_field_card(base, state, education)
+        if card is not None:
+            return card
         return self._card(
             "education:more", "education", QuestionKind.CHOICE,
-            "是否还有下一段教育经历？",
-            options=["添加下一段教育", EDUCATION_DONE_OPTION],
+            "是否还有上一段学历要填写？（例如：本科）",
+            options=["添加上一段学历", EDUCATION_DONE_OPTION],
         )
+
+    def _pending_degree_school_card(self, state):
+        degree = state.pending_education_degree or ""
+        prompt = f"你{degree}阶段的学校是？" if degree else "学校名称是？"
+        return self._card(
+            "education:new:school", "education", QuestionKind.TEXT,
+            prompt, skippable=False,
+        )
+
+    def _education_field_card(self, base, state, education):
+        optional_degrees = ("博士", "硕士", "本科")
+        steps = [
+            ("school", QuestionKind.TEXT, "学校名称是？", False),
+            ("major", QuestionKind.CHOICE_FREE,
+             "所学专业是？（按学校类型优先展示，也可以自己填）", False),
+            ("period", QuestionKind.YEAR_MONTH_RANGE,
+             "这段学历的起止时间是？（结束留空表示至今）", True),
+            ("gpa", QuestionKind.TEXT,
+             "GPA 或均分是？（可跳过，如 3.8/4.0 或 88/100）", True),
+            ("rank", QuestionKind.TEXT,
+             "专业排名或占比是？（可跳过，如 前10% 或 3/120）", True),
+        ]
+        if education.degree in optional_degrees:
+            steps.append(("research", QuestionKind.TEXT,
+                          "研究方向是？（可跳过）", True))
+            steps.append(("thesis", QuestionKind.TEXT,
+                          "毕业论文或毕业设计题目是？（可跳过）", True))
+        steps.append(("courses", QuestionKind.MULTI_CHOICE,
+                      "勾选或添加核心课程（可跳过）", True))
+        for field, kind, prompt, skippable in steps:
+            step_id = f"education:{education.id}:{field}"
+            if self._skipped(state, step_id):
+                continue
+            if field == "school" and education.school:
+                continue
+            if field == "major" and education.major:
+                continue
+            if field == "period" and education.start:
+                continue
+            if field == "gpa" and education.gpa:
+                continue
+            if field == "rank" and education.rank:
+                continue
+            if field == "research" and education.research_direction:
+                continue
+            if field == "thesis" and education.thesis:
+                continue
+            if field == "courses" and education.core_courses:
+                continue
+            if field == "major":
+                return self._card(
+                    step_id, "education", kind, prompt,
+                    options=self._major_options(education), skippable=skippable,
+                )
+            if field == "period":
+                return self._card(
+                    step_id, "education", kind, prompt,
+                    extra={"end": education.end or ""}, skippable=skippable,
+                )
+            if field == "courses":
+                return self._card(
+                    step_id, "education", kind, prompt,
+                    options=list(state.course_options), skippable=skippable,
+                )
+            return self._card(step_id, "education", kind, prompt, skippable=skippable)
+        return None
+
+    @staticmethod
+    def _major_options(education):
+        if education.school:
+            return majors_for_school(education.school)
+        return catalog_majors()
 
     def _experience_card(self, base, state):
         default_labels = [label for _, label in EXPERIENCE_TYPE_OPTIONS]
@@ -404,9 +458,9 @@ class QuestionnaireService:
         if step_id.startswith("target:"):
             return self._answer_target(base, step_id, value)
         if step_id == "education:add":
-            if value != "开始填写":
-                raise ValueError("选项不正确")
-            return base
+            return self._education_degree_choice(base, state, value)
+        if step_id == "education:new:degree":
+            return self._education_degree_choice(base, state, value)
         if step_id == "education:more":
             return self._education_more(base, state, value)
         if step_id.startswith("education:"):
@@ -457,14 +511,29 @@ class QuestionnaireService:
             raise ValueError(f"unknown target step: {step_id}")
         return self._bump(base)
 
+    def _education_degree_choice(self, base, state, value):
+        if value == HIGH_SCHOOL_OPTION:
+            if "education" not in state.completed_sections:
+                state.completed_sections.append("education")
+            state.pending_education_degree = ""
+            return base
+        if value in FIRST_DEGREE_OPTIONS or value in NEXT_DEGREE_OPTIONS:
+            state.pending_education_degree = value
+            return base
+        raise ValueError("学历选项不正确")
+
     def _answer_education(self, base, state, step_id, value, values, extra):
         parts = step_id.split(":")
         if parts[1] == "new" and parts[2] == "school":
             if not value:
                 raise ValueError("学校名称不能为空")
-            education = Education(school=value)
+            education = Education(
+                school=value,
+                degree=state.pending_education_degree or "",
+            )
             base.educations.append(education)
             state.edited_education_id = education.id
+            state.pending_education_degree = ""
             return self._bump(base)
         education_id = UUID(parts[1])
         education = next(
@@ -494,6 +563,14 @@ class QuestionnaireService:
                 for item in values
                 if item.strip()
             ]
+        elif field == "gpa":
+            education.gpa = value
+        elif field == "rank":
+            education.rank = value
+        elif field == "research":
+            education.research_direction = value
+        elif field == "thesis":
+            education.thesis = value
         else:
             raise ValueError(f"unknown education step: {step_id}")
         education.updated_at = utc_now()
@@ -505,7 +582,7 @@ class QuestionnaireService:
                 state.completed_sections.append("education")
             state.edited_education_id = None
             return base
-        if value == "添加下一段教育":
+        if value == "添加上一段学历":
             state.edited_education_id = None
             return base
         raise ValueError("选项不正确")

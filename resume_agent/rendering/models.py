@@ -29,6 +29,10 @@ class RenderedEducation(BaseModel):
     degree: str = ""
     period: str = ""
     courses: List[str] = Field(default_factory=list)
+    gpa: str = ""
+    rank: str = ""
+    research_direction: str = ""
+    thesis: str = ""
 
 
 class RenderedResume(BaseModel):
@@ -48,6 +52,7 @@ class RenderedResume(BaseModel):
     skills: list[str] = Field(default_factory=list)
     self_summary: str = ""
     custom_snippets: List[VersionSnippet] = Field(default_factory=list)
+    photo_data_uri: str = ""
     markdown: str
     html: str
     warnings: list[RenderWarning] = Field(default_factory=list)

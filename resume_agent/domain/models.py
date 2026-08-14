@@ -110,6 +110,10 @@ class Education(BaseModel):
     start: str = ""
     end: Optional[str] = None
     core_courses: List[str] = Field(default_factory=list)
+    gpa: str = ""
+    rank: str = ""
+    research_direction: str = ""
+    thesis: str = ""
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
@@ -151,6 +155,7 @@ class CandidateProfile(BaseModel):
     location: str = ""
     links: List[str] = Field(default_factory=list)
     skills: List[str] = Field(default_factory=list)
+    photo: str = ""
 
 
 class FactProposal(BaseModel):
@@ -258,6 +263,7 @@ class QuestionnaireState(BaseModel):
     completed_sections: List[str] = Field(default_factory=list)
     edited_education_id: Optional[UUID] = None
     edited_experience_id: Optional[UUID] = None
+    pending_education_degree: str = ""
     course_options: List[str] = Field(default_factory=list)
     skill_options: List[str] = Field(default_factory=list)
     job_analysis: List[str] = Field(default_factory=list)

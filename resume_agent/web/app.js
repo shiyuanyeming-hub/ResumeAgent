@@ -310,6 +310,7 @@ async function activateBase(base) {
     });
     await refreshQuestionnaire();
     resetComposerAction();
+    presentQuestionCard(questionnaireState?.next || null);
     byId("language-button").textContent = LANGUAGE_LABELS[state.locale];
     finishSessionTransition(transition);
     renderJdTab();
@@ -451,17 +452,44 @@ async function chooseLanguage(locale) {
   }
   state.locale = "zh";
   saveState();
+  const panel = byId("chat-panel");
+  panel.replaceChildren();
+  const heading = element("div", "section-heading");
+  heading.append(
+    element("h2", "", "你想应聘什么岗位？"),
+    element("p", "", "导师会根据这个岗位，一步步问你、帮你把简历问出来。"),
+  );
+  const form = element("form", "onboarding-form");
+  form.id = "onboarding-form";
+  form.append(field("目标岗位", "role", "例如：产品经理"));
+  const submit = element("button", "primary", "开始，让导师来问我");
+  submit.type = "submit";
+  form.append(submit);
+  form.addEventListener("submit", startMentorSession);
+  panel.append(heading, form);
+  byId("chat-composer").hidden = true;
+}
+
+async function startMentorSession(event) {
+  event.preventDefault();
+  const role = String(new FormData(event.currentTarget).get("role") || "").trim();
+  if (!role) {
+    showToast("请填写目标岗位");
+    return;
+  }
+  const submit = event.currentTarget.querySelector("button[type=submit]");
+  submit.disabled = true;
   try {
     const base = await api.createFactBase({
-      role: "",
+      role,
       country: "",
       languages: ["zh", "ja", "en"],
     });
     await activateBase(base);
     if (currentBase?.id === base.id && versions.length === 0) {
       const version = await api.createVersion(base.id, {
-        name: defaultZhVersionName(""),
-        target_role: "",
+        name: defaultZhVersionName(role),
+        target_role: role,
         company: "",
         raw_jd: "",
         locale: "zh",
@@ -470,9 +498,28 @@ async function chooseLanguage(locale) {
       versions = [...versions.filter((item) => item.id !== version.id), version];
       await chooseVersion(version.id);
     }
+    await refreshQuestionnaire();
+    appendJobAnalysis();
+    renderConversation();
+    presentQuestionCard(questionnaireState?.next || null);
   } catch (error) {
     showToast(error instanceof ApiError ? error.message : "档案创建失败");
+    submit.disabled = false;
   }
+}
+
+function appendJobAnalysis() {
+  const analysis = questionnaireState?.jobAnalysis;
+  if (!analysis || !analysis.length) return;
+  const messagesBox = byId("chat-messages");
+  if (!messagesBox) return;
+  const intro = element("div", "message assistant-message mentor-analysis");
+  const heading = element("strong", "", "关于「" + (currentBase?.target?.role || "这个岗位") + "」，导师想说：");
+  const list = document.createElement("ul");
+  for (const item of analysis) list.append(element("li", "", item));
+  intro.append(heading, list);
+  messagesBox.append(intro);
+  messagesBox.scrollTop = messagesBox.scrollHeight;
 }
 
 function experienceSelector() {
@@ -602,6 +649,17 @@ function renderConversation() {
     }
     if (pending.length) messages.append(renderPendingProposal(pending.at(-1)));
     if (currentSession.current_question && !pending.length) {
+      const options = currentSession.current_question.options || [];
+      if (options.length) {
+        const chips = element("div", "interview-option-chips");
+        for (const option of options) {
+          const chip = element("button", "chip-button", option);
+          chip.type = "button";
+          chip.addEventListener("click", () => quickAnswer(option));
+          chips.append(chip);
+        }
+        messages.append(chips);
+      }
       const unknown = element("button", "text-button", "暂时想不到");
       unknown.type = "button";
       unknown.addEventListener("click", recordUnknown);
@@ -632,11 +690,16 @@ function sectionNavElement() {
 }
 
 function questionAreaElement() {
-  const area = element("div", "question-area");
-  const card = questionnaireState?.next;
+  return element("div", "question-area");
+}
+
+function presentQuestionCard(card) {
+  const dialog = byId("question-dialog");
+  const body = byId("question-dialog-body");
   if (card) {
-    area.append(renderQuestionCard(card));
-    return area;
+    body.replaceChildren(renderQuestionCard(card));
+    if (!dialog.open) dialog.showModal();
+    return;
   }
   const progress = questionnaireState?.progress || [];
   if (progress.length && progress.every((item) => item.done)) {
@@ -645,14 +708,17 @@ function questionAreaElement() {
       "p", "question-prompt",
       "🎉 各章节已收集完毕，可在右侧预览微调并导出 PDF 等格式。",
     ));
-    area.append(done);
-    return area;
+    body.replaceChildren(done);
+    if (!dialog.open) dialog.showModal();
+    return;
   }
   const summary = progress.find((item) => item.section === "summary");
   if (summary && !summary.done && currentVersion) {
-    area.append(summaryGenerateCard());
+    body.replaceChildren(summaryGenerateCard());
+    if (!dialog.open) dialog.showModal();
+    return;
   }
-  return area;
+  if (dialog.open) dialog.close();
 }
 
 function summaryGenerateCard() {
@@ -680,6 +746,7 @@ async function generateSummaryOptions() {
     currentVersion = loaded.find((item) => item.id === versionId) || currentVersion;
     await refreshQuestionnaire();
     renderConversation();
+    presentQuestionCard(questionnaireState?.next || null);
   } catch (error) {
     if (!baseActivationGate.isCurrent(baseGeneration)) return;
     showToast(error instanceof ApiError ? error.message : "自我评价生成失败");
@@ -870,7 +937,11 @@ async function refreshQuestionnaire() {
     api.getFactBase(baseId),
   ]);
   if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
-  questionnaireState = { progress: view.sections, next: view.next };
+  questionnaireState = {
+    progress: view.sections,
+    next: view.next,
+    jobAnalysis: view.job_analysis || [],
+  };
   cacheBase(base);
 }
 
@@ -884,10 +955,12 @@ async function answerQuestionCard(card, result) {
     await refreshQuestionnaire();
     await renderDocument();
     renderConversation();
+    presentQuestionCard(questionnaireState?.next || null);
   } catch (error) {
     if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
     showToast(error instanceof ApiError ? error.message : "回答保存失败");
     renderConversation();
+    presentQuestionCard(card);
   }
 }
 
@@ -900,9 +973,11 @@ async function skipQuestionCard(card) {
     if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
     await refreshQuestionnaire();
     renderConversation();
+    presentQuestionCard(questionnaireState?.next || null);
   } catch (error) {
     if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
     showToast(error instanceof ApiError ? error.message : "跳过失败");
+    presentQuestionCard(card);
   }
 }
 
@@ -914,6 +989,7 @@ async function startInterviewForCard(card) {
       await activateExperience(experienceId);
       if (!currentBase || state.experienceId !== experienceId) return;
     }
+    presentQuestionCard(null);
     await refreshQuestionnaire();
     renderConversation();
   } catch (error) {
@@ -1047,6 +1123,14 @@ async function rejectFact(proposalId) {
     if (!isCurrentExperienceContext(context)) return;
     showToast(error instanceof ApiError ? error.message : "事实退回失败");
   }
+}
+
+function quickAnswer(text) {
+  const input = byId("chat-input");
+  const composer = byId("chat-composer");
+  if (!input || !composer) return;
+  input.value = text;
+  composer.requestSubmit();
 }
 
 async function recordUnknown() {

@@ -12,6 +12,11 @@ import {
   createTransitionGate,
   storeBaseSelection,
 } from "/assets/workbench-state.js";
+import {
+  answerPayload,
+  normalizeChips,
+  periodExtra,
+} from "/assets/questionnaire.js";
 
 const STORAGE_KEY = "resume-agent-ui-v1";
 const LANGUAGE_LABELS = {
@@ -56,6 +61,7 @@ let versions = [];
 let currentVersion = null;
 let capabilitiesState = null;
 let currentRendered = null;
+let questionnaireState = null;
 let editMode = false;
 let editorView = "visual";
 let editorTarget = null;
@@ -301,6 +307,7 @@ async function activateBase(base) {
       sessionId: session?.id || "",
       versionId: currentVersion?.id || "",
     });
+    await refreshQuestionnaire();
     resetComposerAction();
     byId("language-button").textContent = LANGUAGE_LABELS[state.locale];
     finishSessionTransition(transition);
@@ -418,7 +425,7 @@ function renderOnboarding() {
   const heading = element("div", "section-heading");
   heading.append(
     element("h2", "", "先建立一份档案"),
-    element("p", "", "填三项即可开始，后面的内容由导师逐步追问。"),
+    element("p", "", "只需填目标岗位；其余信息由向导逐步提问收集。"),
   );
 
   const form = element("form", "onboarding-form");
@@ -426,8 +433,6 @@ function renderOnboarding() {
   form.append(
     field("目标岗位", "role", "例如：数据分析师"),
     field("目标国家或地区（可选）", "country", "例如：日本"),
-    field("公司、学校或项目", "organization", "例如：星河科技"),
-    field("你当时的角色", "experienceRole", "例如：数据分析实习生"),
   );
   const submit = element("button", "primary", "创建档案并开始");
   submit.type = "submit";
@@ -442,21 +447,18 @@ async function handleOnboarding(event) {
   const form = new FormData(event.currentTarget);
   const role = String(form.get("role") || "").trim();
   const country = String(form.get("country") || "").trim();
-  const organization = String(form.get("organization") || "").trim();
-  const experienceRole = String(form.get("experienceRole") || "").trim();
-  if (!role || !organization || !experienceRole) {
-    showToast("请填写目标岗位、经历名称和角色");
+  if (!role) {
+    showToast("请填写目标岗位");
     return;
   }
   const submit = event.currentTarget.querySelector("button[type=submit]");
   submit.disabled = true;
   try {
-    let base = await api.createFactBase({
+    const base = await api.createFactBase({
       role,
       country,
       languages: ["zh", "ja", "en"],
     });
-    base = await api.addExperience(base.id, { organization, role: experienceRole });
     await activateBase(base);
   } catch (error) {
     showToast(error instanceof ApiError ? error.message : "档案创建失败");
@@ -547,7 +549,7 @@ function renderConversation() {
   }
   const panel = byId("chat-panel");
   panel.replaceChildren();
-  panel.append(experienceSelector(), renderInterviewProgress());
+  panel.append(sectionNavElement(), questionAreaElement(), experienceSelector(), renderInterviewProgress());
 
   const actions = element("div", "panel-actions");
   const pending = currentSession
@@ -601,6 +603,264 @@ function renderConversation() {
   byId("chat-composer").hidden = state.tab !== "chat";
   messages.scrollTop = messages.scrollHeight;
   setSessionTransitionUi();
+}
+
+function sectionNavElement() {
+  const nav = element("nav", "section-nav");
+  nav.setAttribute("aria-label", "简历章节");
+  const progress = questionnaireState?.progress || [];
+  for (const item of progress) {
+    const chip = element(
+      "button",
+      `section-chip${item.done ? " done" : ""}${item.current ? " current" : ""}`,
+      item.label,
+    );
+    chip.type = "button";
+    chip.title = item.done ? "已完成" : "待完善";
+    nav.append(chip);
+  }
+  return nav;
+}
+
+function questionAreaElement() {
+  const area = element("div", "question-area");
+  const card = questionnaireState?.next;
+  if (card) area.append(renderQuestionCard(card));
+  return area;
+}
+
+function yearMonthField(initial = "") {
+  const input = document.createElement("input");
+  input.type = "month";
+  if (input.type !== "month") {
+    const wrap = element("span", "year-month-fallback");
+    const year = document.createElement("select");
+    const currentYear = new Date().getFullYear();
+    for (let y = currentYear; y >= currentYear - 40; y -= 1) {
+      year.append(new Option(`${y}年`, String(y)));
+    }
+    const month = document.createElement("select");
+    for (let m = 1; m <= 12; m += 1) {
+      month.append(new Option(`${m}月`, String(m).padStart(2, "0")));
+    }
+    const value = String(initial || "");
+    if (/^\d{4}-\d{2}$/.test(value)) {
+      year.value = value.slice(0, 4);
+      month.value = value.slice(5, 7);
+    }
+    wrap.append(year, month);
+    wrap.getValue = () => `${year.value}-${month.value}`;
+    return wrap;
+  }
+  input.value = String(initial || "");
+  input.min = "1990-01";
+  input.max = "2035-12";
+  return input;
+}
+
+function readYearMonth(field) {
+  return field.type === "month" ? field.value : field.getValue();
+}
+
+function yearMonthRangeField(card) {
+  const wrap = element("div", "year-month-range");
+  const start = yearMonthField(card.value || "");
+  const end = yearMonthField((card.extra && card.extra.end) || "");
+  const presentLabel = element("label", "check-row", "至今");
+  const present = document.createElement("input");
+  present.type = "checkbox";
+  present.checked = !card.extra || !card.extra.end;
+  presentLabel.prepend(present);
+  present.addEventListener("change", () => {
+    end.hidden = present.checked;
+  });
+  end.hidden = present.checked;
+  wrap.append(
+    element("span", "", "开始"),
+    start,
+    element("span", "", "结束"),
+    end,
+    presentLabel,
+  );
+  wrap.readValue = () => ({
+    start: readYearMonth(start),
+    end: present.checked ? "" : readYearMonth(end),
+  });
+  return wrap;
+}
+
+function addFreeChip(chipsBox, text) {
+  const exists = [...chipsBox.querySelectorAll('input[type="checkbox"]')]
+    .some((box) => box.value === text);
+  if (exists) return;
+  const label = element("label", "check-row chip");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.value = text;
+  box.checked = true;
+  label.append(box, document.createTextNode(text));
+  chipsBox.append(label);
+}
+
+function collectChips(chipsBox) {
+  return [...chipsBox.querySelectorAll('input[type="checkbox"]:checked')]
+    .map((box) => box.value);
+}
+
+function renderQuestionCard(card) {
+  const article = element("article", "question-card");
+  article.dataset.stepId = card.step_id;
+  article.append(element("p", "question-prompt", card.prompt));
+  if (card.kind === "interview") {
+    const start = element("button", "primary", "开始追问这段经历");
+    start.type = "button";
+    start.addEventListener("click", () => startInterviewForCard(card));
+    article.append(start);
+    return article;
+  }
+  const form = element("form", "question-card-form");
+  let readValue = null;
+
+  if (card.kind === "text") {
+    const isMultiline = card.step_id.includes("links");
+    const input = document.createElement(isMultiline ? "textarea" : "input");
+    input.value = card.value || "";
+    if (isMultiline) input.rows = 3;
+    input.placeholder = "输入后点确定";
+    form.append(input);
+    readValue = () => ({ value: input.value.trim() });
+  } else if (card.kind === "choice" || card.kind === "choice_free") {
+    const optionsBox = element("div", "choice-options");
+    for (const option of card.options || []) {
+      const label = element("label", "check-row");
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = `choice-${card.step_id}`;
+      radio.value = option;
+      label.append(radio, document.createTextNode(option));
+      optionsBox.append(label);
+    }
+    let freeInput = null;
+    if (card.kind === "choice_free") {
+      freeInput = document.createElement("input");
+      freeInput.placeholder = "其他，自己填写";
+      optionsBox.append(freeInput);
+    }
+    form.append(optionsBox);
+    readValue = () => {
+      const checked = form.querySelector('input[type="radio"]:checked');
+      if (checked) return { value: checked.value };
+      return { value: freeInput ? freeInput.value.trim() : "" };
+    };
+  } else if (card.kind === "multi_choice") {
+    const chips = element("div", "choice-options chips");
+    const selected = new Set(card.values || []);
+    for (const option of card.options || []) {
+      const label = element("label", "check-row chip");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.value = option;
+      box.checked = selected.has(option);
+      label.append(box, document.createTextNode(option));
+      chips.append(label);
+    }
+    const free = document.createElement("input");
+    free.placeholder = "添加自定义项，点右侧添加";
+    const add = element("button", "text-button", "添加");
+    add.type = "button";
+    add.addEventListener("click", () => {
+      const text = free.value.trim();
+      if (!text) return;
+      addFreeChip(chips, text);
+      free.value = "";
+    });
+    const freeRow = element("div", "chip-free-row");
+    freeRow.append(free, add);
+    form.append(chips, freeRow);
+    readValue = () => ({ values: normalizeChips(collectChips(chips)) });
+  } else if (card.kind === "year_month_range") {
+    const range = yearMonthRangeField(card);
+    form.append(range);
+    readValue = () => ({ extra: periodExtra(range.readValue().start, range.readValue().end) });
+  }
+
+  const actions = element("div", "question-actions");
+  const submit = element("button", "primary", "确定");
+  submit.type = "submit";
+  actions.append(submit);
+  if (card.skippable) {
+    const skip = element("button", "text-button", "跳过");
+    skip.type = "button";
+    skip.addEventListener("click", () => skipQuestionCard(card));
+    actions.append(skip);
+  }
+  form.append(actions);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const result = readValue ? readValue() : {};
+    answerQuestionCard(card, result);
+  });
+  article.append(form);
+  return article;
+}
+
+async function refreshQuestionnaire() {
+  if (!currentBase) return;
+  const baseId = currentBase.id;
+  const baseGeneration = baseActivationGate.current();
+  const [view, base] = await Promise.all([
+    api.questionnaire(baseId),
+    api.getFactBase(baseId),
+  ]);
+  if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
+  questionnaireState = { progress: view.sections, next: view.next };
+  cacheBase(base);
+}
+
+async function answerQuestionCard(card, result) {
+  if (!currentBase || sessionTransitionGate.isTransitioning()) return;
+  const baseId = currentBase.id;
+  const baseGeneration = baseActivationGate.current();
+  try {
+    await api.answerQuestion(baseId, answerPayload(card.step_id, result));
+    if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
+    await refreshQuestionnaire();
+    renderConversation();
+  } catch (error) {
+    if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
+    showToast(error instanceof ApiError ? error.message : "回答保存失败");
+    renderConversation();
+  }
+}
+
+async function skipQuestionCard(card) {
+  if (!currentBase || sessionTransitionGate.isTransitioning()) return;
+  const baseId = currentBase.id;
+  const baseGeneration = baseActivationGate.current();
+  try {
+    await api.skipQuestion(baseId, card.step_id);
+    if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
+    await refreshQuestionnaire();
+    renderConversation();
+  } catch (error) {
+    if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
+    showToast(error instanceof ApiError ? error.message : "跳过失败");
+  }
+}
+
+async function startInterviewForCard(card) {
+  const experienceId = String(card.step_id || "").split(":")[1];
+  if (!currentBase || !experienceId) return;
+  try {
+    if (state.experienceId !== experienceId) {
+      await activateExperience(experienceId);
+      if (!currentBase || state.experienceId !== experienceId) return;
+    }
+    await refreshQuestionnaire();
+    renderConversation();
+  } catch (error) {
+    showToast(error instanceof ApiError ? error.message : "经历切换失败");
+  }
 }
 
 async function ensureSession(context) {

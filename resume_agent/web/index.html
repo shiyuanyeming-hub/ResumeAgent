@@ -35,14 +35,16 @@
     <main class="workbench">
       <section class="panel task-panel" aria-label="简历任务面板">
         <nav id="primary-tabs" class="primary-tabs" aria-label="简历工作区" role="tablist">
-          <button id="chat-tab" data-tab="chat" aria-controls="chat-panel" aria-selected="true" role="tab" tabindex="0" type="button">访谈</button>
-          <button id="facts-tab" data-tab="facts" aria-controls="facts-panel" aria-selected="false" role="tab" tabindex="-1" type="button">事实库</button>
-          <button id="jd-tab" data-tab="jd" aria-controls="jd-panel" aria-selected="false" role="tab" tabindex="-1" type="button">JD 定制</button>
+          <button id="chat-tab" data-tab="chat" aria-controls="chat-panel" aria-selected="true" role="tab" tabindex="0" type="button">问答</button>
+          <button id="facts-tab" data-tab="facts" aria-controls="facts-panel" aria-selected="false" role="tab" tabindex="-1" type="button">片段</button>
+          <button id="jd-tab" data-tab="jd" aria-controls="jd-panel" aria-selected="false" role="tab" tabindex="-1" type="button">版本</button>
           <button id="tools-tab" data-tab="tools" aria-controls="tools-panel" aria-selected="false" role="tab" tabindex="-1" type="button">工具</button>
         </nav>
 
         <div class="panel-content">
           <section id="chat-panel" class="tab-panel" data-panel="chat" aria-labelledby="chat-tab" role="tabpanel" tabindex="0">
+            <nav id="section-nav" class="section-nav" aria-label="简历章节"></nav>
+            <div id="question-area" class="question-area" aria-live="polite"></div>
             <div class="panel-actions">
               <button id="start-interview" class="primary" type="button">开始访谈</button>
             </div>

@@ -10,10 +10,12 @@ from resume_agent.domain.models import (
     CareerFactBase,
     ConfidenceStatus,
     Experience,
+    ExperienceType,
     QualityDimension,
     ResumeVersion,
 )
 from resume_agent.rendering.models import (
+    RenderedEducation,
     RenderedExperience,
     RenderedResume,
     RenderWarning,
@@ -33,8 +35,11 @@ DIMENSION_ORDER = (
 COPY = {
     "zh": {
         "title": "简历",
-        "experience": "工作经历",
+        "education": "教育背景",
+        "internshipWork": "实习/工作经历",
+        "campusProjects": "校园及项目经历",
         "skills": "技能",
+        "courses": "核心课程",
         "summary": "职业概述",
         "target": "求职意向",
         "present": "至今",
@@ -72,7 +77,13 @@ class ResumeRenderer:
         style = version.styles.get(version.locale) or default_style(version.locale)
         theme = get_theme(version.locale, style)
         experiences, has_estimates = self._resolve_experiences(base, version)
+        educations = self._resolve_educations(base)
         skills = self._collect_skills(base, version)
+        if version.locale == "zh":
+            for skill in base.profile.skills:
+                normalized = skill.strip()
+                if normalized and normalized not in skills:
+                    skills.append(normalized)
         warnings = self._warnings(base, version, experiences, has_estimates)
         candidate_name = base.profile.name or self._candidate_fallback(version.locale)
         headline = version.target_role or base.target.role or version.name
@@ -96,6 +107,8 @@ class ResumeRenderer:
             summary,
             experiences,
             skills,
+            educations,
+            version,
         )
         rendered_html = self._html(
             version.locale,
@@ -106,6 +119,8 @@ class ResumeRenderer:
             summary,
             experiences,
             skills,
+            educations,
+            version,
         )
         return RenderedResume(
             version_id=version.id,
@@ -120,6 +135,7 @@ class ResumeRenderer:
             contact_line=contact_line,
             summary=summary,
             experiences=experiences,
+            educations=educations,
             skills=skills,
             markdown=markdown,
             html=rendered_html,
@@ -151,6 +167,7 @@ class ResumeRenderer:
             has_estimates = has_estimates or experience_has_estimates
             rendered.append(
                 RenderedExperience(
+                    id=experience.id,
                     organization=experience.organization,
                     role=experience.role,
                     period=self._period(
@@ -159,6 +176,7 @@ class ResumeRenderer:
                         version.locale,
                     ),
                     bullets=bullets,
+                    type=experience.type,
                 )
             )
         return rendered, has_estimates
@@ -270,6 +288,156 @@ class ResumeRenderer:
             escaped = escaped.replace(marker, f"\\{marker}")
         return escaped
 
+    def _resolve_educations(self, base):
+        return [
+            RenderedEducation(
+                school=education.school,
+                major=education.major,
+                degree=education.degree,
+                period=self._period(education.start, education.end or "", "zh"),
+                courses=list(education.core_courses),
+            )
+            for education in base.educations
+        ]
+
+    @staticmethod
+    def _zh_group(experiences):
+        work = [
+            item for item in experiences
+            if item.type in (ExperienceType.WORK, ExperienceType.INTERNSHIP)
+        ]
+        campus = [
+            item for item in experiences
+            if item.type not in (ExperienceType.WORK, ExperienceType.INTERNSHIP)
+        ]
+        return work, campus
+
+    def _zh_markdown(self, candidate_name, headline, contact_line, summary,
+                     experiences, skills, educations, version):
+        copy = COPY["zh"]
+        lines = [f"# {self._markdown_escape(candidate_name)}", ""]
+        if headline:
+            lines.append(f"**{copy['target']}：** {self._markdown_escape(headline)}")
+            lines.append("")
+        if contact_line:
+            lines.append(self._markdown_escape(contact_line))
+            lines.append("")
+        if educations:
+            lines.append(f"## {copy['education']}")
+            lines.append("")
+            for education in educations:
+                meta = " | ".join(
+                    item for item in (education.major, education.degree, education.period) if item
+                )
+                heading = education.school + (f" | {meta}" if meta else "")
+                lines.append(f"### {self._markdown_escape(heading)}")
+                lines.append("")
+                if education.courses:
+                    lines.append(
+                        f"{copy['courses']}："
+                        + "、".join(self._markdown_escape(item) for item in education.courses)
+                    )
+                    lines.append("")
+        work, campus = self._zh_group(experiences)
+        for heading, group in ((copy["internshipWork"], work), (copy["campusProjects"], campus)):
+            if not group:
+                continue
+            lines.append(f"## {heading}")
+            lines.append("")
+            for experience in group:
+                experience_heading = f"{experience.role} — {experience.organization}"
+                if experience.period:
+                    experience_heading += f" | {experience.period}"
+                lines.append(f"### {self._markdown_escape(experience_heading)}")
+                lines.append("")
+                lines.extend(f"- {self._markdown_escape(item)}" for item in experience.bullets)
+                lines.append("")
+        if skills:
+            lines.append(f"## {copy['skills']}")
+            lines.append("")
+            lines.append(" · ".join(self._markdown_escape(item) for item in skills))
+            lines.append("")
+        return "\n".join(lines).strip() + "\n"
+
+    def _zh_html(self, theme, candidate_name, headline, contact_line,
+                 experiences, skills, educations, version):
+        copy = COPY["zh"]
+        escape = lambda value: html.escape(value, quote=True)
+        css = f"""
+        :root {{--accent:{theme.accent};--secondary:{theme.secondary};--tint:{theme.tint};--border:{theme.border};}}
+        @page {{ size: A4; margin: 14mm 16mm; }}
+        * {{ box-sizing: border-box; }}
+        body {{ font-family:{theme.font_family}; color:#1f2937; font-size:10pt; line-height:1.58; margin:0; }}
+        header {{ border-bottom:2.2pt solid var(--accent); padding-bottom:3mm; margin-bottom:5mm; }}
+        h1 {{ color:var(--accent); font-size:21pt; margin:0; letter-spacing:.4px; }}
+        .headline {{ color:var(--secondary); font-size:10.5pt; margin:1mm 0; }}
+        .contact,.meta {{ color:#5f6772; font-size:9pt; margin:.8mm 0; }}
+        h2 {{ color:var(--accent); font-size:11.5pt; border-left:3.5pt solid var(--accent); padding-left:2.5mm; margin:5mm 0 2mm; }}
+        h3 {{ font-size:10.5pt; margin:2.5mm 0 .5mm; color:#20252b; }}
+        p {{ margin:1mm 0; }}
+        ul {{ margin:1mm 0 2mm; padding-left:5mm; }}
+        li {{ margin:.7mm 0; }}
+        li::marker {{ color:var(--accent); }}
+        .skill {{ display:inline-block; background:var(--tint); border:.5pt solid var(--border); border-radius:2.5mm; padding:.5mm 2.2mm; margin:.5mm; color:var(--accent); font-size:9pt; }}
+        .drop-zone {{ border-radius:3mm; transition: outline .1s; }}
+        .drop-zone.drop-active {{ outline: 2.2pt dashed var(--accent); outline-offset: 2mm; }}
+        """
+        contact = f'<p class="contact">{escape(contact_line)}</p>' if contact_line else ""
+        education_html = []
+        for education in educations:
+            meta = " · ".join(
+                item for item in (education.major, education.degree, education.period) if item
+            )
+            courses = (
+                f'<p class="meta">{copy["courses"]}：'
+                + "、".join(escape(item) for item in education.courses)
+                + "</p>"
+                if education.courses else ""
+            )
+            education_html.append(
+                f'<section class="education"><h3>{escape(education.school)}</h3>'
+                f'<p class="meta">{escape(meta)}</p>{courses}</section>'
+            )
+        work, campus = self._zh_group(experiences)
+        groups_html = []
+        for heading, group in ((copy["internshipWork"], work), (copy["campusProjects"], campus)):
+            if not group:
+                continue
+            section_html = []
+            for experience in group:
+                meta = " · ".join(
+                    item for item in (experience.organization, experience.period) if item
+                )
+                bullets = "".join(
+                    f"<li>{escape(item)}</li>" for item in experience.bullets
+                )
+                section_html.append(
+                    f'<section class="experience drop-zone" data-section="experience:{experience.id}">'
+                    f"<h3>{escape(experience.role)}</h3>"
+                    f'<p class="meta">{escape(meta)}</p><ul>{bullets}</ul></section>'
+                )
+            groups_html.append(f"<h2>{heading}</h2>{''.join(section_html)}")
+        skills_html = "".join(f'<span class="skill">{escape(item)}</span>' for item in skills)
+        skills_section = f"<h2>{copy['skills']}</h2><div>{skills_html}</div>" if skills else ""
+        education_section = (
+            f"<h2>{copy['education']}</h2>{''.join(education_html)}" if educations else ""
+        )
+        body = (
+            f'<header><h1>{escape(candidate_name)}</h1>'
+            f'<p class="headline">{copy["target"]}：{escape(headline)}</p>'
+            f"{contact}</header>"
+            f"{education_section}"
+            f"{''.join(groups_html)}"
+            f"{skills_section}"
+        )
+        return (
+            "<!DOCTYPE html>\n"
+            f'<html lang="zh"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width, initial-scale=1">'
+            f'<title>{escape(copy["title"])}</title><style>{css}</style></head>'
+            f"<body>{body}</body></html>"
+        )
+
     def _markdown(
         self,
         locale: str,
@@ -279,8 +447,15 @@ class ResumeRenderer:
         summary: str,
         experiences: Iterable[RenderedExperience],
         skills: list[str],
+        educations: list[RenderedEducation],
+        version: ResumeVersion,
     ) -> str:
         copy = COPY[locale]
+        if locale == "zh":
+            return self._zh_markdown(
+                candidate_name, headline, contact_line, summary,
+                experiences, skills, educations, version,
+            )
         lines = [f"# {self._markdown_escape(candidate_name)}", ""]
         if headline:
             lines.extend(
@@ -308,8 +483,8 @@ class ResumeRenderer:
             )
         return "\n".join(lines).strip() + "\n"
 
-    @staticmethod
     def _html(
+        self,
         locale,
         theme,
         candidate_name,
@@ -318,6 +493,8 @@ class ResumeRenderer:
         summary,
         experiences,
         skills,
+        educations,
+        version,
     ) -> str:
         copy = COPY[locale]
         escape = lambda value: html.escape(value, quote=True)
@@ -355,6 +532,11 @@ class ResumeRenderer:
         skills_section = (
             f"<h2>{copy['skills']}</h2><div>{skills_html}</div>" if skills else ""
         )
+        if locale == "zh":
+            return self._zh_html(
+                theme, candidate_name, headline, contact_line,
+                experiences, skills, educations, version,
+            )
         body = (
             f'<header><h1>{escape(candidate_name)}</h1>'
             f'<p class="headline">{escape(copy["target"])}：{escape(headline)}</p>'

@@ -99,7 +99,7 @@ def test_renderer_escapes_profile_and_fact_html():
 @pytest.mark.parametrize(
     ("locale", "heading", "title"),
     [
-        ("zh", "工作经历", "简历"),
+        ("zh", "实习/工作经历", "简历"),
         ("en", "Experience", "Resume"),
         ("ja", "職務経歴", "職務経歴書"),
     ],
@@ -157,3 +157,42 @@ def test_renderer_rejects_invalid_locale_style_and_selected_reference():
         renderer.render(base, invalid_style)
     with pytest.raises(ValueError, match="unknown experience"):
         renderer.render(base, invalid_reference)
+
+
+from resume_agent.domain.models import Education, ExperienceType
+from resume_agent.rendering.models import RenderedEducation
+
+
+def test_zh_renders_education_section():
+    base, first, _ = evidence_fixture()
+    base.educations.append(
+        Education(school="某大学", major="统计学", degree="本科",
+                  start="2020-09", core_courses=["概率论", "数理统计"])
+    )
+    version = make_version(base, [first], locale="zh")
+    rendered = ResumeRenderer().render(base, version)
+    assert "## 教育背景" in rendered.markdown
+    assert "某大学" in rendered.markdown
+    assert "核心课程：概率论、数理统计" in rendered.markdown
+    assert "教育背景" in rendered.html
+    assert any(item.school == "某大学" for item in rendered.educations)
+
+
+def test_zh_groups_experiences_by_type():
+    base, first, second = evidence_fixture()
+    second.type = ExperienceType.CAMPUS
+    version = make_version(base, [first, second], locale="zh")
+    rendered = ResumeRenderer().render(base, version)
+    assert "## 实习/工作经历" in rendered.markdown
+    assert "## 校园及项目经历" in rendered.markdown
+    assert "校园及项目经历" in rendered.html
+
+
+def test_zh_skills_section_uses_profile_skills():
+    base, first, _ = evidence_fixture()
+    base.profile.skills = ["SQL", "Python"]
+    first.linked_skills = []
+    version = make_version(base, [first], locale="zh")
+    rendered = ResumeRenderer().render(base, version)
+    assert "## 技能" in rendered.markdown
+    assert "SQL · Python" in rendered.markdown

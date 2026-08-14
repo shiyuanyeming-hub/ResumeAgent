@@ -1,6 +1,6 @@
 """Ports that keep domain services independent from agents and storage."""
 
-from typing import List, Protocol
+from typing import List, Optional, Protocol
 from uuid import UUID
 
 from resume_agent.application.question_planner import QuestionPlan
@@ -10,6 +10,7 @@ from resume_agent.domain.models import (
     Experience,
     FactProposal,
     InterviewSession,
+    QualityDimension,
     ResumeVersion,
 )
 
@@ -24,6 +25,7 @@ class FactAuditAgent(Protocol):
         message: str,
         session: InterviewSession,
         base: CareerFactBase,
+        predicted_dimension: Optional[QualityDimension] = None,
     ) -> FactProposal: ...
 
 

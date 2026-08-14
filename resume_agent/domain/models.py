@@ -117,6 +117,7 @@ class FactProposal(BaseModel):
     dimension: QualityDimension
     values: List[FactValue] = Field(min_length=1)
     rationale: str = ""
+    next_question: str = ""
     created_at: datetime = Field(default_factory=utc_now)
 
 
@@ -199,6 +200,8 @@ class InterviewSession(BaseModel):
     unknown_attempts: Dict[QualityDimension, int] = Field(default_factory=dict)
     skipped_dimensions: Set[QualityDimension] = Field(default_factory=set)
     current_question: Optional[InterviewQuestion] = None
+    pending_next_text: str = ""
+    pending_next_dimension: Optional[QualityDimension] = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

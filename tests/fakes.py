@@ -80,12 +80,14 @@ class StubAuditAgent:
         message: str,
         session: InterviewSession,
         base: CareerFactBase,
+        predicted_dimension=None,
     ) -> FactProposal:
         return FactProposal(
             fact_base_revision=base.revision,
             experience_id=session.active_experience_id,
             dimension=QualityDimension.ACTION,
             values=[FactValue(text=message)],
+            next_question=f"下一轮请补充{predicted_dimension.value}？" if predicted_dimension else "",
         )
 
 

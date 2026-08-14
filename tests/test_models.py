@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 from pydantic import ValidationError
 
@@ -6,6 +8,7 @@ from resume_agent.domain.models import (
     ConfidenceStatus,
     FactProposal,
     FactValue,
+    InterviewSession,
     QualityDimension,
     Specificity,
 )
@@ -61,3 +64,19 @@ def test_stale_proposal_is_rejected():
 
     with pytest.raises(ValueError, match="revision conflict"):
         base.confirm(proposal)
+
+
+def test_fact_proposal_defaults_next_question():
+    proposal = FactProposal(
+        fact_base_revision=0,
+        experience_id=uuid4(),
+        dimension=QualityDimension.ACTION,
+        values=[FactValue(text="搭建了看板")],
+    )
+    assert proposal.next_question == ""
+
+
+def test_interview_session_pending_next_defaults():
+    session = InterviewSession(fact_base_id=uuid4())
+    assert session.pending_next_text == ""
+    assert session.pending_next_dimension is None

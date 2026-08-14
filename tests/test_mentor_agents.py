@@ -180,3 +180,47 @@ def test_structured_writer_rejects_multiple_questions():
 
     with pytest.raises(AgentOutputError):
         StructuredQuestionWriterAgent(runner).write(plan, experience, base.target)
+
+
+class QueueRunner:
+    def __init__(self, responses):
+        self.responses = list(responses)
+
+    def run(self, prompt):
+        return self.responses.pop(0)
+
+
+def make_session_and_base():
+    base = CareerFactBase()
+    experience = base.add_experience("星河科技", "数据分析实习生")
+    session = InterviewSession(
+        fact_base_id=base.id, active_experience_id=experience.id
+    )
+    return session, base
+
+
+def test_structured_audit_returns_next_question():
+    runner = QueueRunner([
+        '{"dimension":"action","values":[{"text":"搭建了留存看板"}],'
+        '"rationale":"","next_question":"那这个看板多久更新一次？"}',
+    ])
+    agent = StructuredFactAuditAgent(runner)
+    session, base = make_session_and_base()
+    proposal = agent.propose(
+        "我搭建了留存看板", session, base,
+        predicted_dimension=QualityDimension.RESULT,
+    )
+    assert proposal.next_question == "那这个看板多久更新一次？"
+    assert proposal.dimension is QualityDimension.ACTION
+
+
+def test_structured_audit_rejects_next_question_with_two_marks():
+    runner = QueueRunner([
+        '{"dimension":"action","values":[{"text":"a"}],'
+        '"next_question":"第一问？第二问？"}',
+        '{"dimension":"action","values":[{"text":"a"}],"next_question":""}',
+    ])
+    agent = StructuredFactAuditAgent(runner)
+    session, base = make_session_and_base()
+    proposal = agent.propose("a", session, base, predicted_dimension=QualityDimension.RESULT)
+    assert proposal.next_question == ""

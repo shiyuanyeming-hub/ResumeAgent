@@ -6,7 +6,7 @@ class AgentUnavailableError(RuntimeError):
 
 
 class UnavailableFactAuditAgent:
-    def propose(self, message, session, base):
+    def propose(self, message, session, base, predicted_dimension=None):
         raise AgentUnavailableError(
             "fact-audit agent is not configured; connect a HelloAgents agent first"
         )

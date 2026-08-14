@@ -1,7 +1,7 @@
 """Structured fact-audit and evidence-question specialist agents."""
 
 import json
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -33,6 +33,15 @@ class FactAuditPayload(BaseModel):
     dimension: QualityDimension
     values: List[ProposedFactPayload] = Field(min_length=1)
     rationale: str = ""
+    next_question: str = ""
+
+    @field_validator("next_question")
+    @classmethod
+    def validate_single_next_question(cls, value: str) -> str:
+        stripped = value.strip()
+        if stripped and stripped.count("?") + stripped.count("？") != 1:
+            raise ValueError("next_question must contain exactly one question mark")
+        return stripped
 
 
 class QuestionPayload(BaseModel):
@@ -58,16 +67,19 @@ class StructuredFactAuditAgent:
         message: str,
         session: InterviewSession,
         base: CareerFactBase,
+        predicted_dimension: Optional[QualityDimension] = None,
     ) -> FactProposal:
         if session.active_experience_id is None:
             raise ValueError("fact audit requires an active experience")
         experience = base.get_experience(session.active_experience_id)
+        predicted_text = predicted_dimension.value if predicted_dimension else "无"
         prompt = (
             f"{FACT_AUDIT_PROMPT}\n"
             f"目标岗位：{base.target.model_dump_json()}\n"
             f"当前经历：{experience.model_dump_json()}\n"
             f"用户本轮回答：{message}\n"
-            "输出字段：dimension、values、rationale。"
+            f"预判下一维度：{predicted_text}\n"
+            "输出字段：dimension、values、rationale、next_question。"
         )
         payload = run_structured(self.runner, prompt, FactAuditPayload)
         source_ids = [
@@ -89,6 +101,7 @@ class StructuredFactAuditAgent:
             dimension=payload.dimension,
             values=values,
             rationale=payload.rationale,
+            next_question=payload.next_question,
         )
 
 

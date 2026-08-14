@@ -11,6 +11,7 @@ FACT_AUDIT_PROMPT = """你是简历事实审计 Agent。你的任务是从用户
 6. confidence 仅可为 unverified 或 estimated。Agent 没有确认事实的权限。
 7. 本轮只归入最主要的一个维度：context、responsibility、action、method、result、evidence。
 8. 只输出一个 JSON 对象，不要输出解释性文字。
+9. 若提供了「预判下一维度」，同时输出 next_question 字段：针对该维度写下一轮唯一的问题（只能有一个问号）；未提供预判维度时 next_question 输出空字符串。
 """
 
 

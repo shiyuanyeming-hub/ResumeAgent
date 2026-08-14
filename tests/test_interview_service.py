@@ -1,3 +1,4 @@
+from resume_agent.agents.unavailable import AgentUnavailableError
 from resume_agent.application.interview_service import InterviewService
 from resume_agent.agents.mentor import DeterministicQuestionWriter
 from resume_agent.application.question_planner import QuestionPlanner
@@ -62,7 +63,7 @@ def test_confirmation_updates_base_and_returns_one_next_question():
     assert turn.proposal.id not in sessions.get(session.id).pending_proposals
 
 
-def test_different_dimension_answer_reasks_with_context_recall_anchors():
+def test_off_dimension_answer_is_anchored_to_asked_dimension():
     service, session, bases, sessions, experience = make_interview()
     service.question_writer = DeterministicQuestionWriter()
     session.skipped_dimensions = set(QualityDimension) - {
@@ -77,19 +78,15 @@ def test_different_dimension_answer_reasks_with_context_recall_anchors():
 
     turn = service.answer(session.id, "I built the weekly dashboard myself")
     assert turn.proposal is not None
-    assert turn.proposal.dimension is QualityDimension.ACTION
+    # 审计分类（action）与追问维度（context）不一致时，以追问的问题为准
+    assert turn.proposal.dimension is QualityDimension.CONTEXT
 
     next_turn = service.confirm(session.id, turn.proposal.id)
 
+    # 其他维度均已跳过、上下文证据仍不完整 → 继续追问上下文（但不记惩罚次数）
     assert next_turn.question is not None
     assert next_turn.question.dimension is QualityDimension.CONTEXT
-    assert next_turn.question.escalation == "recall_anchors"
-    assert (
-        next_turn.question.text
-        == "回想一下当时触发这项工作的具体背景、业务需求或要解决的问题是什么？"
-    )
-    assert next_turn.question.text != asked.text
-    assert sessions.get(session.id).attempts == {QualityDimension.CONTEXT: 1}
+    assert sessions.get(session.id).attempts == {}
 
 
 def test_skip_after_two_unknown_answers_prevents_same_gap():
@@ -123,7 +120,7 @@ def test_off_dimension_answer_does_not_count_as_explicit_unknown():
     assert second.attempts == 2
     assert second.skipped is True
     stored = sessions.get(session.id)
-    assert stored.attempts[QualityDimension.CONTEXT] == 3
+    assert stored.attempts[QualityDimension.CONTEXT] == 2
     assert stored.unknown_attempts[QualityDimension.CONTEXT] == 2
 
 
@@ -266,3 +263,44 @@ def test_confirm_question_carries_followup_options():
     turn = service.confirm(stored.id, proposal.id)
     assert turn.question is not None
     assert turn.question.options == ["选项A", "选项B"]
+
+
+class FailingAuditAgent:
+    def propose(self, message, session, base, predicted_dimension=None):
+        raise AgentUnavailableError("model request failed")
+
+
+class FailingQuestionWriter:
+    def write(self, plan, experience, target):
+        raise AgentUnavailableError("model request failed")
+
+
+def test_answer_falls_back_offline_when_audit_agent_unavailable():
+    base = CareerFactBase()
+    experience = base.add_experience("校园创业项目", "核心产品成员")
+    session = InterviewSession(
+        fact_base_id=base.id, active_experience_id=experience.id
+    )
+    service = InterviewService(
+        InMemoryFactBaseRepository([base]),
+        InMemorySessionRepository([session]),
+        FailingAuditAgent(),
+        StubQuestionWriter(),
+    )
+    turn = service.answer(session.id, "我负责组织商赛报名与宣传")
+    assert turn.proposal is not None
+    assert turn.proposal.values[0].text == "我负责组织商赛报名与宣传"
+    assert "？" in turn.proposal.next_question
+    stored = service.get_session(session.id)
+    assert len(stored.pending_proposals) == 1
+
+
+def test_question_writer_falls_back_offline_when_unavailable():
+    service, session, bases, sessions, experience = make_interview()
+    service.question_writer = FailingQuestionWriter()
+    session.skipped_dimensions = set(QualityDimension) - {QualityDimension.CONTEXT}
+    sessions.save(session)
+    question = service.next_question(session.id)
+    assert question is not None
+    assert question.dimension is QualityDimension.CONTEXT
+    assert question.text == "这段经历当时要解决的具体问题或背景是什么？"

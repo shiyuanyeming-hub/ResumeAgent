@@ -5,6 +5,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from resume_agent.agents.mentor import DeterministicQuestionWriter
+from resume_agent.agents.structured import AgentOutputError
+from resume_agent.agents.unavailable import AgentUnavailableError
 from resume_agent.application.ports import (
     FactAuditAgent,
     FactBaseRepository,
@@ -19,7 +22,9 @@ from resume_agent.application.question_planner import (
 )
 from resume_agent.domain.models import (
     CareerFactBase,
+    ConfidenceStatus,
     FactProposal,
+    FactValue,
     InterviewQuestion,
     InterviewMessage,
     InterviewSession,
@@ -113,21 +118,38 @@ class InterviewService:
         session.updated_at = utc_now()
         self.sessions.save(session)
         predicted = self._predict_next_dimension(session, base, asked_dimension)
-        proposal = self.audit_agent.propose(
-            message, session, base, predicted_dimension=predicted
-        )
+        try:
+            proposal = self.audit_agent.propose(
+                message, session, base, predicted_dimension=predicted
+            )
+        except (AgentUnavailableError, AgentOutputError):
+            proposal = self._offline_proposal(
+                message, session, base, asked_dimension, predicted
+            )
         if proposal.experience_id != session.active_experience_id:
             raise ValueError("agent proposal targeted a different experience")
         if proposal.fact_base_revision != base.revision:
             raise ValueError("agent proposal used a stale fact-base revision")
 
-        if (
-            asked_dimension is not None
-            and proposal.dimension is not asked_dimension
-        ):
-            session.attempts[asked_dimension] = (
-                session.attempts.get(asked_dimension, 0) + 1
-            )
+        # 收敛：回答的是哪个维度的问题，事实就归到哪个维度。
+        # 审计分类与追问维度不一致时，以追问的问题为准，保证每轮都能推进证据。
+        if asked_dimension is not None and proposal.dimension is not asked_dimension:
+            proposal.dimension = asked_dimension
+
+        # 去重：过滤与已有事实完全相同的提议，避免反复确认同一句话。
+        experience = base.get_experience(session.active_experience_id)
+        existing_texts = {
+            value.text.strip()
+            for values in experience.statements.values()
+            for value in values
+        }
+        unique_values = [
+            value for value in proposal.values
+            if value.text.strip() not in existing_texts
+        ]
+        if unique_values:
+            proposal.values = unique_values
+
         session.pending_proposals[proposal.id] = proposal
         session.pending_next_text = proposal.next_question
         session.pending_next_dimension = predicted
@@ -235,6 +257,44 @@ class InterviewService:
             self.sessions.save(session)
         return question
 
+    def _offline_proposal(
+        self,
+        message: str,
+        session: InterviewSession,
+        base: CareerFactBase,
+        asked_dimension: Optional[QualityDimension],
+        predicted_dimension: Optional[QualityDimension],
+    ) -> FactProposal:
+        """LLM 不可用时的确定性兜底：直接引用用户原话生成待确认事实。"""
+        experience = base.get_experience(session.active_experience_id)
+        dimension = asked_dimension or predicted_dimension or QualityDimension.RESPONSIBILITY
+        next_plan = QuestionPlan(
+            dimension=predicted_dimension or QualityDimension.RESULT,
+            priority=0,
+            attempt=0,
+            escalation="direct",
+        )
+        next_question = DeterministicQuestionWriter().write(
+            next_plan, experience, base.target
+        )
+        source_ids = [
+            item.id for item in session.messages[-1:] if item.role == "user"
+        ]
+        return FactProposal(
+            fact_base_revision=base.revision,
+            experience_id=session.active_experience_id,
+            dimension=dimension,
+            values=[
+                FactValue(
+                    text=message.strip(),
+                    confidence=ConfidenceStatus.UNVERIFIED,
+                    source_message_ids=source_ids,
+                )
+            ],
+            rationale="导师暂不可用，直接引用你的原话作为待确认事实。",
+            next_question=next_question,
+        )
+
     def _make_question(
         self,
         session: InterviewSession,
@@ -261,7 +321,10 @@ class InterviewService:
         ):
             text = session.pending_next_text
         else:
-            text = self.question_writer.write(plan, experience, base.target).strip()
+            try:
+                text = self.question_writer.write(plan, experience, base.target).strip()
+            except (AgentUnavailableError, AgentOutputError):
+                text = DeterministicQuestionWriter().write(plan, experience, base.target)
             if not text:
                 raise ValueError("question writer returned an empty question")
         session.pending_next_text = ""

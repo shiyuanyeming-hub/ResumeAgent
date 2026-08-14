@@ -106,7 +106,7 @@ def test_two_unknown_answers_skip_dimension(tmp_path):
     assert question.json()["dimension"] != "result"
 
 
-def test_missing_llm_agent_returns_503_and_preserves_user_message(tmp_path):
+def test_missing_llm_agent_falls_back_offline_and_preserves_user_message(tmp_path):
     app = create_app(tmp_path / "resume-agent.db")
     with TestClient(app) as client:
         base, experience, session_response = create_interview(client)
@@ -117,7 +117,10 @@ def test_missing_llm_agent_returns_503_and_preserves_user_message(tmp_path):
         )
         fetched_session = client.get(f"/sessions/{session['id']}")
 
-    assert answer.status_code == 503
+    assert answer.status_code == 200
+    assert answer.json()["proposal"]["values"][0]["text"] == (
+        "Please do not lose this answer"
+    )
     assert fetched_session.status_code == 200
     assert fetched_session.json()["messages"][-1]["content"] == (
         "Please do not lose this answer"

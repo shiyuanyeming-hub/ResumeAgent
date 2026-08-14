@@ -30,6 +30,8 @@ def create_default_app(environ: Optional[Mapping[str, str]] = None):
         database_path,
         fact_audit_agent=runtime.fact_auditor,
         question_writer=runtime.question_writer,
+        course_advisor=runtime.course_advisor,
+        skill_advisor=runtime.skill_advisor,
         agent_capabilities=runtime.capabilities,
     )
 

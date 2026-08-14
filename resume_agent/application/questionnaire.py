@@ -15,6 +15,7 @@ from resume_agent.domain.models import (
     ResumeVersion,
     utc_now,
 )
+from resume_agent.domain.course_catalog import courses_for_major
 from resume_agent.domain.quality import evaluate_experience, evaluate_profile_completeness
 from resume_agent.domain.questionnaire_steps import (
     DEGREE_OPTIONS,
@@ -170,7 +171,7 @@ class QuestionnaireEngine:
             return self._card(
                 f"education:{education.id}:courses", "education",
                 QuestionKind.MULTI_CHOICE, "勾选或添加核心课程（可跳过）",
-                options=self._provider("courses", base, state),
+                options=list(state.course_options),
             )
         return self._card(
             "education:more", "education", QuestionKind.CHOICE,
@@ -234,7 +235,7 @@ class QuestionnaireEngine:
         return self._card(
             "skills:tags", "skills", QuestionKind.MULTI_CHOICE,
             "勾选或添加你的技能标签（可跳过）",
-            options=self._provider("skills", base, state),
+            options=list(state.skill_options),
             values=list(base.profile.skills),
         )
 
@@ -259,10 +260,19 @@ class QuestionnaireEngine:
 class QuestionnaireService:
     """Side-effecting orchestration: writes answers into models, returns next card."""
 
-    def __init__(self, fact_bases, repository, engine):
+    def __init__(
+        self,
+        fact_bases,
+        repository,
+        engine,
+        course_advisor=None,
+        skill_advisor=None,
+    ):
         self.fact_bases = fact_bases
         self.repository = repository
         self.engine = engine
+        self.course_advisor = course_advisor
+        self.skill_advisor = skill_advisor
 
     def _state(self, fact_base_id):
         try:
@@ -274,7 +284,12 @@ class QuestionnaireService:
 
     def next_card(self, fact_base_id, version=None):
         base = self.fact_bases.get(fact_base_id)
-        return self.engine.next_card(base, self._state(fact_base_id), version=version)
+        state = self._state(fact_base_id)
+        if not state.skill_options and not base.profile.skills:
+            state.skill_options = self._skill_options(base)
+            state.updated_at = utc_now()
+            self.repository.save(state)
+        return self.engine.next_card(base, state, version=version)
 
     def progress(self, fact_base_id, version=None):
         base = self.fact_bases.get(fact_base_id)
@@ -402,6 +417,7 @@ class QuestionnaireService:
             if not value:
                 raise ValueError("专业不能为空")
             education.major = value
+            state.course_options = self._course_options(value)
         elif field == "degree":
             if value not in DEGREE_OPTIONS:
                 raise ValueError("学历选项不正确")
@@ -412,7 +428,9 @@ class QuestionnaireService:
             education.end = end
         elif field == "courses":
             education.core_courses = [
-                item.strip() for item in values if item.strip()
+                item.replace("（AI 推荐）", "").strip()
+                for item in values
+                if item.strip()
             ]
         else:
             raise ValueError(f"unknown education step: {step_id}")
@@ -470,6 +488,38 @@ class QuestionnaireService:
     def _answer_skills(self, base, values):
         base.profile.skills = [item.strip() for item in values if item.strip()]
         return self._bump(base)
+
+    def _course_options(self, major):
+        options = list(courses_for_major(major))
+        if self.course_advisor is not None:
+            try:
+                for item in self.course_advisor.recommend(major):
+                    if item and item not in options:
+                        options.append(f"{item}（AI 推荐）")
+            except Exception:
+                pass  # AI 推荐失败时静默降级为词典
+        return options
+
+    def _skill_options(self, base):
+        options = []
+        for experience in base.experiences:
+            for skill in experience.linked_skills:
+                if skill and skill not in options:
+                    options.append(skill)
+        if self.skill_advisor is not None:
+            facts_text = "\n".join(
+                value.text
+                for experience in base.experiences
+                for values in experience.statements.values()
+                for value in values
+            )
+            try:
+                for skill in self.skill_advisor.extract(facts_text):
+                    if skill and skill not in options:
+                        options.append(skill)
+            except Exception:
+                pass
+        return options
 
     @staticmethod
     def _period(extra):

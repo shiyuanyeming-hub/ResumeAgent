@@ -256,6 +256,8 @@ class QuestionnaireState(BaseModel):
     completed_sections: List[str] = Field(default_factory=list)
     edited_education_id: Optional[UUID] = None
     edited_experience_id: Optional[UUID] = None
+    course_options: List[str] = Field(default_factory=list)
+    skill_options: List[str] = Field(default_factory=list)
     updated_at: datetime = Field(default_factory=utc_now)
 
 

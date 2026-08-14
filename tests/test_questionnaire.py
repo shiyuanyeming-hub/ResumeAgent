@@ -177,3 +177,112 @@ def test_experience_choice_creates_typed_experience():
     assert loaded.experiences[0].type is ExperienceType.INTERNSHIP
     card = questionnaire.next_card(base.id)
     assert card.step_id == f"experience:{loaded.experiences[0].id}:organization"
+
+
+class FakeCourseAdvisor:
+    def recommend(self, major):
+        return ["机器学习"]
+
+
+class FakeSkillAdvisor:
+    def extract(self, facts_text):
+        return ["SQL", "Python"]
+
+
+def test_course_options_merge_catalog_and_advisor():
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(), QuestionnaireEngine(),
+        course_advisor=FakeCourseAdvisor(),
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="数据分析师")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.answer(base.id, "education:add", value="开始填写")
+    questionnaire.answer(base.id, "education:new:school", value="某大学")
+    loaded = questionnaire.fact_bases.get(base.id)
+    education_id = loaded.educations[0].id
+    questionnaire.answer(
+        base.id, f"education:{education_id}:major", value="计算机科学与技术"
+    )
+    questionnaire.answer(base.id, f"education:{education_id}:degree", value="本科")
+    questionnaire.answer(
+        base.id, f"education:{education_id}:period",
+        extra={"start": "2020-09", "end": ""},
+    )
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == f"education:{education_id}:courses"
+    assert "数据结构" in card.options
+    assert "机器学习（AI 推荐）" in card.options
+
+
+def test_course_answer_strips_ai_suffix():
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(), QuestionnaireEngine(),
+        course_advisor=FakeCourseAdvisor(),
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.answer(base.id, "target:role", value="数据分析师")
+    questionnaire.answer(base.id, "education:add", value="开始填写")
+    questionnaire.answer(base.id, "education:new:school", value="某大学")
+    loaded = questionnaire.fact_bases.get(base.id)
+    education_id = loaded.educations[0].id
+    questionnaire.answer(
+        base.id, f"education:{education_id}:major", value="计算机科学与技术"
+    )
+    questionnaire.answer(
+        base.id, f"education:{education_id}:courses",
+        values=["数据结构", "机器学习（AI 推荐）"],
+    )
+    loaded = questionnaire.fact_bases.get(base.id)
+    assert loaded.educations[0].core_courses == ["数据结构", "机器学习"]
+
+
+def test_skills_options_merge_linked_and_advisor():
+    base = CareerFactBase()
+    base.target.role = "数据分析师"
+    base.target.country = "东京"
+    base.profile.name = "王明"
+    base.profile.email = "wang@example.com"
+    base.profile.phone = "13800000000"
+    base.profile.location = "东京"
+    base.profile.links = ["https://example.com"]
+    base.educations.append(Education(school="某大学", major="统计", start="2020-09"))
+    experience = base.add_experience("星河科技", "实习生")
+    experience.linked_skills = ["Excel"]
+    experience.start = "2024-06"
+    experience.statements[QualityDimension.CONTEXT] = [
+        FactValue(text="业务需要留存分析", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.RESPONSIBILITY] = [
+        FactValue(text="负责看板搭建", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.ACTION] = [
+        FactValue(text="用 SQL 写查询", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.RESULT] = [
+        FactValue(text="被团队采用", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    state = QuestionnaireState(
+        fact_base_id=base.id, completed_sections=["education", "experience"]
+    )
+    repository = InMemoryQuestionnaireRepository([state])
+    questionnaire = QuestionnaireService(
+        FactBaseService(InMemoryFactBaseRepository([base])),
+        repository,
+        QuestionnaireEngine(),
+        skill_advisor=FakeSkillAdvisor(),
+    )
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "skills:tags"
+    assert "Excel" in card.options
+    assert "SQL" in card.options

@@ -52,6 +52,7 @@ from resume_agent.application.questionnaire import (
     QuestionnaireService,
 )
 from resume_agent.application.version_service import VersionService
+from resume_agent.domain.course_catalog import catalog_majors
 from resume_agent.domain.models import (
     CareerFactBase,
     Education,
@@ -95,6 +96,8 @@ def create_app(
     *,
     fact_audit_agent: Optional[FactAuditAgent] = None,
     question_writer: Optional[QuestionWriterAgent] = None,
+    course_advisor=None,
+    skill_advisor=None,
     resume_exporter: Optional[ResumeExporter] = None,
     resume_renderer: Optional[ResumeRenderer] = None,
     agent_capabilities: Optional[AgentCapabilityStatus] = None,
@@ -124,7 +127,15 @@ def create_app(
     questionnaire_service = QuestionnaireService(
         fact_base_service,
         SQLiteQuestionnaireRepository(store),
-        QuestionnaireEngine(),
+        QuestionnaireEngine(
+            options_providers={
+                "majors": lambda base, state: catalog_majors(),
+                "courses": lambda base, state: list(state.course_options),
+                "skills": lambda base, state: list(state.skill_options),
+            }
+        ),
+        course_advisor=course_advisor,
+        skill_advisor=skill_advisor,
     )
     container = ServiceContainer(
         store=store,

@@ -241,3 +241,23 @@ test("wareki helpers cover the Heisei and Reiwa boundary", () => {
   assert.equal(toWareki("2019-05-01"), "令和元年5月1日");
   assert.equal(fromWareki("平成31年4月30日"), "2019-04-30");
 });
+
+
+test("answer returns proposal with optional next_question", async () => {
+  const api = createApi(async (url, init) => {
+    if (url.endsWith("/answers")) {
+      return new Response(JSON.stringify({
+        proposal: {
+          id: "p-1",
+          dimension: "action",
+          values: [{ text: "搭建看板" }],
+          next_question: "结果是什么？",
+        },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    throw new Error(`unexpected url ${url}`);
+  });
+
+  const turn = await api.answer("s-1", "我搭了看板");
+  assert.equal(turn.proposal.next_question, "结果是什么？");
+});

@@ -336,3 +336,20 @@ dialog p { color: var(--muted); line-height: 1.6; }
   .preview-editor-bar { flex-wrap: wrap; overflow-x: visible; }
   #preview-frame { min-height: 940px; }
 }
+
+.typing-message {
+  opacity: 0.75;
+}
+.typing-message::after {
+  content: "";
+  display: inline-block;
+  width: 1em;
+  text-align: left;
+  animation: typing-dots 1.2s steps(4, end) infinite;
+}
+@keyframes typing-dots {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+}

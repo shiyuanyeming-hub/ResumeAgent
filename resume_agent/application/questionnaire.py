@@ -227,7 +227,8 @@ class QuestionnaireEngine:
             return self._card(
                 f"experience:{experience.id}:interview", "experience",
                 QuestionKind.INTERVIEW,
-                "导师会继续追问这段经历的具体内容，请回答左侧问题。", skippable=False,
+                "导师会继续追问这段经历的具体内容，请回答左侧问题。",
+                skippable=True,
             )
         return None
 

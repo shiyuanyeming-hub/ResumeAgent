@@ -141,6 +141,15 @@ export function createApi(fetchImpl = globalThis.fetch) {
     experienceQuality: (factBaseId, experienceId) => request(
       `/fact-bases/${factBaseId}/experiences/${experienceId}/quality`,
     ),
+    questionnaire: (factBaseId) => request(`/fact-bases/${factBaseId}/questionnaire`),
+    answerQuestion: (factBaseId, payload) => request(
+      `/fact-bases/${factBaseId}/questionnaire/answer`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+    skipQuestion: (factBaseId, stepId) => request(
+      `/fact-bases/${factBaseId}/questionnaire/skip`,
+      { method: "POST", body: JSON.stringify({ step_id: stepId }) },
+    ),
     listSessions: (factBaseId, experienceId = "") => {
       const query = experienceId
         ? `?experience_id=${encodeURIComponent(experienceId)}`

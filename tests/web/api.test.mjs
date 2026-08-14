@@ -261,3 +261,26 @@ test("answer returns proposal with optional next_question", async () => {
   const turn = await api.answer("s-1", "我搭了看板");
   assert.equal(turn.proposal.next_question, "结果是什么？");
 });
+
+
+test("questionnaire methods post the right contracts", async () => {
+  const calls = [];
+  const api = createApi(async (url, init) => {
+    calls.push([url, init]);
+    return new Response(JSON.stringify({ next: { step_id: "profile:email" } }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+
+  await api.questionnaire("base-1");
+  await api.answerQuestion("base-1", { step_id: "profile:name", value: "王明" });
+  await api.skipQuestion("base-1", "profile:links");
+
+  assert.equal(calls[0][0], "/fact-bases/base-1/questionnaire");
+  assert.equal(calls[1][0], "/fact-bases/base-1/questionnaire/answer");
+  assert.equal(calls[1][1].method, "POST");
+  assert.deepEqual(JSON.parse(calls[1][1].body), { step_id: "profile:name", value: "王明" });
+  assert.equal(calls[2][0], "/fact-bases/base-1/questionnaire/skip");
+  assert.deepEqual(JSON.parse(calls[2][1].body), { step_id: "profile:links" });
+});

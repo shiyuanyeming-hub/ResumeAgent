@@ -264,7 +264,12 @@ class QuestionnaireEngine:
         )
 
     def _summary_card(self, state, version):
-        if version is None or not version.summary_options or self._skipped(state, "summary:pick"):
+        if (
+            version is None
+            or not version.summary_options
+            or self._skipped(state, "summary:pick")
+            or "summary:pick" in state.answered
+        ):
             return None
         return self._card(
             "summary:pick", "summary", QuestionKind.MULTI_CHOICE,

@@ -109,6 +109,36 @@ def test_engine_summary_card_reads_version_options():
     assert card.options == version.summary_options
 
 
+def test_engine_summary_card_hidden_after_answer():
+    """勾选自我评价后不得再次弹出该卡（回归：点确认无法进行下一步）。"""
+    base = make_base()
+    base.educations.append(Education(school="某大学", major="统计", start="2020-09"))
+    experience = base.add_experience("星河科技", "实习生")
+    experience.start = "2024-06"
+    experience.statements[QualityDimension.CONTEXT] = [
+        FactValue(text="业务需要留存分析", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.RESPONSIBILITY] = [
+        FactValue(text="负责看板搭建", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.ACTION] = [
+        FactValue(text="搭建看板", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.RESULT] = [
+        FactValue(text="被团队采用", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    base.profile.skills = ["SQL"]
+    state = QuestionnaireState(fact_base_id=base.id)
+    state.completed_sections = ["education", "experience"]
+    state.answered = ["summary:pick"]
+    version = ResumeVersion(
+        fact_base_id=base.id, name="默认版本", base_revision=0,
+        summary_options=["稳重可靠，善于协作。"],
+    )
+    card = engine.next_card(base, state, version=version)
+    assert card is None
+
+
 def make_service():
     fact_bases = FactBaseService(InMemoryFactBaseRepository())
     base = fact_bases.create()

@@ -142,6 +142,9 @@ export function createApi(fetchImpl = globalThis.fetch) {
       `/fact-bases/${factBaseId}/experiences/${experienceId}/quality`,
     ),
     questionnaire: (factBaseId) => request(`/fact-bases/${factBaseId}/questionnaire`),
+    searchSchools: (query) => request(
+      `/schools/search?q=${encodeURIComponent(query)}&limit=8`,
+    ),
     answerQuestion: (factBaseId, payload) => request(
       `/fact-bases/${factBaseId}/questionnaire/answer`,
       { method: "POST", body: JSON.stringify(payload) },

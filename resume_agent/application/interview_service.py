@@ -270,7 +270,7 @@ class InterviewService:
         if self.guide is not None:
             options = self.guide.followup_options(
                 base.target.role,
-                f"{experience.organization} · {experience.role}",
+                self._experience_context(experience),
                 plan.dimension.value,
             )
         return MentorQuestion(
@@ -280,3 +280,18 @@ class InterviewService:
             escalation=plan.escalation,
             options=options,
         )
+
+    @staticmethod
+    def _experience_context(experience) -> str:
+        """给选项生成器提供更贴合经历的上下文（含已确认事实）。"""
+        facts = "；".join(
+            value.text
+            for values in experience.statements.values()
+            for value in values
+        )
+        context = f"{experience.organization} · {experience.role}"
+        if experience.start:
+            context += f"（{experience.start} 起）"
+        if facts:
+            context += f"；已确认事实：{facts}"
+        return context

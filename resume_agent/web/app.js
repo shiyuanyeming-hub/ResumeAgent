@@ -784,6 +784,62 @@ function collectChips(chipsBox) {
     .map((box) => box.value);
 }
 
+function schoolSearchField(card) {
+  const wrap = element("div", "school-search");
+  const input = document.createElement("input");
+  input.value = card.value || "";
+  input.autocomplete = "off";
+  input.placeholder = "输入学校名、拼音或首字母（如：华中 / huazhong / hz）";
+  const list = element("div", "school-suggestions");
+  list.hidden = true;
+  let timer = null;
+  let latest = 0;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const query = input.value.trim();
+    if (!query) {
+      latest += 1;
+      list.replaceChildren();
+      list.hidden = true;
+      return;
+    }
+    timer = setTimeout(async () => {
+      const generation = latest;
+      try {
+        const results = await api.searchSchools(query);
+        if (generation !== latest) return;
+        list.replaceChildren();
+        if (!results.length) {
+          list.hidden = true;
+          return;
+        }
+        for (const item of results) {
+          const row = element(
+            "button",
+            "school-suggestion",
+            `${item.name}（${item.province}${item.tags ? ` · ${item.tags}` : ""}）`,
+          );
+          row.type = "button";
+          row.addEventListener("click", () => {
+            input.value = item.name;
+            latest += 1;
+            list.replaceChildren();
+            list.hidden = true;
+            input.focus();
+          });
+          list.append(row);
+        }
+        list.hidden = false;
+      } catch {
+        list.hidden = true;
+      }
+    }, 200);
+  });
+  wrap.append(input, list);
+  wrap.readValue = () => input.value;
+  return wrap;
+}
+
 function renderQuestionCard(card) {
   const article = element("article", "question-card");
   article.dataset.stepId = card.step_id;
@@ -792,13 +848,20 @@ function renderQuestionCard(card) {
   let readValue = null;
 
   if (card.kind === "text") {
-    const isMultiline = card.step_id.includes("links");
-    const input = document.createElement(isMultiline ? "textarea" : "input");
-    input.value = card.value || "";
-    if (isMultiline) input.rows = 3;
-    input.placeholder = "输入后点确定";
-    form.append(input);
-    readValue = () => ({ value: input.value.trim() });
+    const isSchool = card.step_id === "education:new:school" || /:school$/.test(card.step_id);
+    if (isSchool) {
+      const field = schoolSearchField(card);
+      form.append(field);
+      readValue = () => ({ value: field.readValue().trim() });
+    } else {
+      const isMultiline = card.step_id.includes("links");
+      const input = document.createElement(isMultiline ? "textarea" : "input");
+      input.value = card.value || "";
+      if (isMultiline) input.rows = 3;
+      input.placeholder = "输入后点确定";
+      form.append(input);
+      readValue = () => ({ value: input.value.trim() });
+    }
   } else if (card.kind === "choice" || card.kind === "choice_free") {
     const optionsBox = element("div", "choice-options");
     const optionCount = (card.options || []).length;
@@ -817,6 +880,17 @@ function renderQuestionCard(card) {
       freeInput = document.createElement("input");
       freeInput.placeholder = "其他，自己填写";
       optionsBox.append(freeInput);
+      // 单选互斥：点选项清空「其他」；在「其他」里输入则取消已选选项
+      const radios = [...optionsBox.querySelectorAll('input[type="radio"]')];
+      for (const radio of radios) {
+        radio.addEventListener("change", () => {
+          if (radio.checked && freeInput) freeInput.value = "";
+        });
+      }
+      freeInput.addEventListener("input", () => {
+        if (!freeInput.value) return;
+        for (const radio of radios) radio.checked = false;
+      });
     }
     form.append(optionsBox);
     readValue = () => {
@@ -1057,30 +1131,35 @@ function interviewQuestionCard(question) {
     element("p", "question-hint", `当前追问：${dim ? dim[1] : question.dimension}`),
   );
   const options = question.options || [];
+  let freeInput = null;
   if (options.length) {
     const chips = element("div", "choice-options chips");
     for (const option of options) {
       const chip = element("button", "chip-button option-chip", option);
       chip.type = "button";
-      chip.addEventListener("click", () => submitInterviewAnswer(option));
+      chip.addEventListener("click", () => {
+        if (!freeInput) return;
+        freeInput.value = option;
+        freeInput.focus();
+      });
       chips.append(chip);
     }
     article.append(chips);
   }
   const freeRow = element("div", "chip-free-row");
-  const input = document.createElement("input");
-  input.placeholder = "或者自己写一段";
+  freeInput = document.createElement("input");
+  freeInput.placeholder = options.length ? "点选项可填入后修改，或自己写" : "写一段真实经历";
   const send = element("button", "primary", "回答");
   send.type = "button";
   const sendFree = () => {
-    const text = input.value.trim();
+    const text = freeInput.value.trim();
     if (text) submitInterviewAnswer(text);
   };
   send.addEventListener("click", sendFree);
-  input.addEventListener("keydown", (event) => {
+  freeInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") sendFree();
   });
-  freeRow.append(input, send);
+  freeRow.append(freeInput, send);
   article.append(freeRow);
   const actions = element("div", "question-actions");
   const unknown = element("button", "text-button", "暂时想不到");

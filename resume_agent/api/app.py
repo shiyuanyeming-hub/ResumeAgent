@@ -57,6 +57,7 @@ from resume_agent.application.questionnaire import (
 )
 from resume_agent.application.version_service import VersionService
 from resume_agent.domain.course_catalog import catalog_majors
+from resume_agent.domain.school_catalog import search_schools as search_school_catalog
 from resume_agent.domain.models import (
     CareerFactBase,
     ConfidenceStatus,
@@ -350,6 +351,10 @@ def create_app(
     )
     def capabilities() -> AgentCapabilityStatus:
         return container.capabilities
+
+    @app.get("/schools/search", tags=["catalog"])
+    def search_schools(q: str = "", limit: int = 8) -> list[dict]:
+        return search_school_catalog(q, limit=limit)
 
     @app.post(
         "/fact-bases",

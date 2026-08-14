@@ -479,7 +479,8 @@ class QuestionnaireService:
         elif field == "period":
             start, end = self._period(extra)
             experience.start = start
-            experience.end = end
+            # Experience.end 是 str 字段：「至今」用空串表示（None 会损坏旧 payload 加载）
+            experience.end = end or ""
         else:
             raise ValueError(f"unknown experience step: {step_id}")
         experience.updated_at = utc_now()

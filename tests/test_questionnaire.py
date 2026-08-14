@@ -286,3 +286,28 @@ def test_skills_options_merge_linked_and_advisor():
     assert card.step_id == "skills:tags"
     assert "Excel" in card.options
     assert "SQL" in card.options
+
+
+def test_experience_period_present_saves_empty_end():
+    """「至今」必须存空串而非 None（Experience.end 是 str，None 会损坏 payload 重载）。"""
+    questionnaire, base = make_service()
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="数据分析师")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    questionnaire.answer(base.id, "experience:add", value="实习")
+    loaded = questionnaire.fact_bases.get(base.id)
+    experience_id = loaded.experiences[0].id
+    questionnaire.answer(base.id, f"experience:{experience_id}:organization", value="星河科技")
+    questionnaire.answer(base.id, f"experience:{experience_id}:role", value="数据分析实习生")
+    questionnaire.answer(
+        base.id, f"experience:{experience_id}:period",
+        extra={"start": "2024-06", "end": ""},
+    )
+    reloaded = questionnaire.fact_bases.get(base.id)  # 重载即验证 payload 合法
+    assert reloaded.experiences[0].end == ""
+    assert reloaded.experiences[0].start == "2024-06"

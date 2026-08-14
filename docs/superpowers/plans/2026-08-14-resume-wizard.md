@@ -1975,7 +1975,7 @@ def test_questionnaire_answer_validates_email(tmp_path):
             f"/fact-bases/{base['id']}/questionnaire/answer",
             json={"step_id": "profile:email", "value": "not-an-email"},
         )
-        assert answer.status_code == 400
+        assert answer.status_code == 422
 
 
 def test_questionnaire_skip_advances(tmp_path):
@@ -2228,7 +2228,7 @@ from resume_agent.infrastructure.sqlite_repositories import (
 - [ ] **Step 5: 运行确认通过**
 
 Run: `.venv/bin/python -m pytest tests/test_api_questionnaire.py tests/test_api_fact_bases.py -q`
-Expected: PASS（`ValueError` 已有 400 异常处理器）
+Expected: PASS（`ValueError` 已有 422 异常处理器，仓库惯例）
 
 - [ ] **Step 6: 提交**
 

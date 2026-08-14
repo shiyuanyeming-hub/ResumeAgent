@@ -98,10 +98,8 @@ class Experience(BaseModel):
     @field_validator("organization", "role")
     @classmethod
     def validate_required_text(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("organization and role must not be empty")
-        return stripped
+        # 问卷流会先创建带类型的空白经历再逐项填写；非空由问卷与 API 层保证。
+        return value.strip()
 
 
 class Education(BaseModel):

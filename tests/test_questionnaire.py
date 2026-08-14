@@ -7,7 +7,7 @@ from resume_agent.application.questionnaire import (
     QuestionKind, QuestionnaireEngine, QuestionnaireService,
 )
 from resume_agent.domain.models import (
-    CareerFactBase, ConfidenceStatus, Education, ExperienceType,
+    CareerFactBase, ConfidenceStatus, Education, Experience, ExperienceType,
     FactValue, QualityDimension, QuestionnaireState, ResumeVersion,
 )
 from tests.fakes import (
@@ -375,3 +375,31 @@ def test_guide_option_creates_typed_experience():
     loaded = questionnaire.fact_bases.get(base.id)
     assert loaded.experiences[1].type is ExperienceType.PROJECT
     assert loaded.experiences[1].organization == "自己组织的读书会"
+
+
+def test_engine_role_card_offline_options_without_guide():
+    base = make_base()
+    experience = Experience(organization="星河科技", role="")
+    base.experiences.append(experience)
+    state = QuestionnaireState(fact_base_id=base.id)
+    state.skipped = ["education:add"]
+    card = engine.next_card(base, state)
+    assert card.step_id == f"experience:{experience.id}:role"
+    assert card.kind is QuestionKind.CHOICE_FREE
+    assert card.options == ["项目负责人", "核心成员", "普通成员", "实习生"]
+
+
+def test_engine_role_card_uses_guide_role_options():
+    class RoleGuide:
+        def followup_options(self, role, text, dimension):
+            assert dimension == "role"
+            return ["数据分析实习生", "产品实习生"]
+
+    base = make_base()
+    experience = Experience(organization="星河科技", role="")
+    base.experiences.append(experience)
+    state = QuestionnaireState(fact_base_id=base.id)
+    state.skipped = ["education:add"]
+    card = QuestionnaireEngine(guide=RoleGuide()).next_card(base, state)
+    assert card.step_id == f"experience:{experience.id}:role"
+    assert card.options == ["数据分析实习生", "产品实习生"]

@@ -385,3 +385,6 @@ dialog p { color: var(--muted); line-height: 1.6; }
 .interview-option-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .chip-button { border: 1px solid var(--border, #d8dde5); border-radius: 999px; padding: 5px 12px; background: #fff; cursor: pointer; }
 .chip-button:hover { border-color: var(--accent, #1d4ed8); background: #eff6ff; }
+.chip-button:disabled { cursor: default; opacity: 0.55; }
+.option-chip { font-size: 13px; }
+.question-hint { color: #64748b; font-size: 12px; margin: -6px 0 10px; }

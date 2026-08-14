@@ -108,6 +108,8 @@ class FollowUpOptionsPayload(BaseModel):
 
 FOLLOWUP_OPTIONS_PROMPT = """你是简历导师。给定目标岗位、当前经历与正在追问的维度，生成 3~5 个具体的中文选项（短短语），供用户快速回答该维度问题；选项要贴合这段经历的上下文，不要空泛。只输出 JSON：{"options": ["选项1", ...]}"""
 
+ROLE_OPTIONS_PROMPT = """你是简历导师。给定目标岗位与一段经历，生成 3~5 个用户在这段经历里可能担任的角色名（中文短标签，如「数据分析实习生」「产品实习生」「项目负责人」「核心成员」），角色名要贴合经历类型与目标岗位。只输出 JSON：{"options": ["角色1", ...]}"""
+
 
 class StructuredJobAnalysisAgent:
     def __init__(self, runner) -> None:
@@ -138,8 +140,9 @@ class StructuredFollowUpOptionsAgent:
         self.runner = runner
 
     def options(self, target_role: str, experience_text: str, dimension: str) -> List[str]:
+        prompt_template = ROLE_OPTIONS_PROMPT if dimension == "role" else FOLLOWUP_OPTIONS_PROMPT
         prompt = (
-            f"{FOLLOWUP_OPTIONS_PROMPT}\n"
+            f"{prompt_template}\n"
             f"目标岗位：{target_role}\n"
             f"当前经历：{experience_text}\n"
             f"追问维度：{dimension}"

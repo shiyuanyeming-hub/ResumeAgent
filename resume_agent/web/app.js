@@ -571,33 +571,6 @@ function renderInterviewProgress() {
   return progress;
 }
 
-function renderPendingProposal(proposal) {
-  const card = element("article", "proposal-card");
-  const dimensionLabel = DIMENSIONS.find(([key]) => key === proposal.dimension)?.[1]
-    || proposal.dimension;
-  card.append(
-    element("strong", "", "待确认事实"),
-    element("span", "proposal-dimension", dimensionLabel),
-  );
-  const list = element("ul", "proposal-values");
-  for (const value of proposal.values) {
-    const item = element("li", "", value.text);
-    if (value.confidence === "estimated") item.append(element("span", "badge", "估算"));
-    if (value.sensitive) item.append(element("span", "badge warning", "敏感"));
-    list.append(item);
-  }
-  card.append(list);
-  const actions = element("div", "proposal-actions");
-  const confirm = element("button", "primary", "确认事实并继续");
-  const reject = element("button", "", "这不是我的意思");
-  confirm.type = reject.type = "button";
-  confirm.addEventListener("click", () => confirmFact(proposal.id));
-  reject.addEventListener("click", () => rejectFact(proposal.id));
-  actions.append(confirm, reject);
-  card.append(actions);
-  return card;
-}
-
 function renderConversation() {
   if (!currentBase) {
     renderOnboarding();
@@ -607,26 +580,19 @@ function renderConversation() {
   panel.replaceChildren();
   panel.append(sectionNavElement(), questionAreaElement(), experienceSelector(), renderInterviewProgress());
 
-  const actions = element("div", "panel-actions");
-  const pending = currentSession
-    ? Object.values(currentSession.pending_proposals || {})
-    : [];
-  const hasQuestion = Boolean(currentSession?.current_question);
-  let startLabel = "开始访谈";
-  if (pending.length) startLabel = "请先确认事实";
-  else if (hasQuestion) startLabel = "请回答当前问题";
-  else if (currentSession) startLabel = "下一轮提问";
-  const start = element(
-    "button",
-    "primary",
-    startLabel,
-  );
-  start.type = "button";
-  start.id = "start-interview";
-  start.disabled = pending.length > 0 || hasQuestion;
-  start.addEventListener("click", startInterview);
-  actions.append(start);
-  panel.append(actions);
+  const hasPendingOrQuestion = Boolean(currentSession)
+    && (Object.values(currentSession.pending_proposals || {}).length > 0
+      || currentSession.current_question);
+  if (hasPendingOrQuestion) {
+    const actions = element("div", "panel-actions");
+    const resume = element("button", "primary", "继续导师追问");
+    resume.type = "button";
+    resume.addEventListener("click", () => presentInterviewFlow({
+      step_id: `experience:${currentSession.active_experience_id}:interview`,
+    }));
+    actions.append(resume);
+    panel.append(actions);
+  }
 
   const messages = element("div", "chat-messages");
   messages.id = "chat-messages";
@@ -636,7 +602,7 @@ function renderConversation() {
       "div",
       "message system-message",
       experience
-        ? `当前经历：${experience.organization} · ${experience.role}。导师会一次问一个问题。`
+        ? `当前经历：${experience.organization} · ${experience.role}。导师会一次问一个问题，你只需要点选或按真实情况回答。`
         : "先添加一段经历，再开始访谈。",
     ));
   } else {
@@ -646,24 +612,6 @@ function renderConversation() {
         `message ${message.role === "user" ? "user-message" : "assistant-message"}`,
         message.content,
       ));
-    }
-    if (pending.length) messages.append(renderPendingProposal(pending.at(-1)));
-    if (currentSession.current_question && !pending.length) {
-      const options = currentSession.current_question.options || [];
-      if (options.length) {
-        const chips = element("div", "interview-option-chips");
-        for (const option of options) {
-          const chip = element("button", "chip-button", option);
-          chip.type = "button";
-          chip.addEventListener("click", () => quickAnswer(option));
-          chips.append(chip);
-        }
-        messages.append(chips);
-      }
-      const unknown = element("button", "text-button", "暂时想不到");
-      unknown.type = "button";
-      unknown.addEventListener("click", recordUnknown);
-      messages.append(unknown);
     }
   }
   panel.append(messages);
@@ -697,6 +645,10 @@ function presentQuestionCard(card) {
   const dialog = byId("question-dialog");
   const body = byId("question-dialog-body");
   if (card) {
+    if (card.kind === "interview") {
+      presentInterviewFlow(card);
+      return;
+    }
     body.replaceChildren(renderQuestionCard(card));
     if (!dialog.open) dialog.showModal();
     return;
@@ -712,8 +664,9 @@ function presentQuestionCard(card) {
     if (!dialog.open) dialog.showModal();
     return;
   }
+  const unfinished = progress.filter((item) => item.section !== "summary" && !item.done);
   const summary = progress.find((item) => item.section === "summary");
-  if (summary && !summary.done && currentVersion) {
+  if (summary && !summary.done && currentVersion && unfinished.length === 0) {
     body.replaceChildren(summaryGenerateCard());
     if (!dialog.open) dialog.showModal();
     return;
@@ -835,13 +788,6 @@ function renderQuestionCard(card) {
   const article = element("article", "question-card");
   article.dataset.stepId = card.step_id;
   article.append(element("p", "question-prompt", card.prompt));
-  if (card.kind === "interview") {
-    const start = element("button", "primary", "开始追问这段经历");
-    start.type = "button";
-    start.addEventListener("click", () => startInterviewForCard(card));
-    article.append(start);
-    return article;
-  }
   const form = element("form", "question-card-form");
   let readValue = null;
 
@@ -981,174 +927,381 @@ async function skipQuestionCard(card) {
   }
 }
 
-async function startInterviewForCard(card) {
-  const experienceId = String(card.step_id || "").split(":")[1];
-  if (!currentBase || !experienceId) return;
-  try {
-    if (state.experienceId !== experienceId) {
-      await activateExperience(experienceId);
-      if (!currentBase || state.experienceId !== experienceId) return;
-    }
-    presentQuestionCard(null);
-    await refreshQuestionnaire();
-    renderConversation();
-  } catch (error) {
-    showToast(error instanceof ApiError ? error.message : "经历切换失败");
+let interviewBusy = false;
+
+function interviewExperienceId(card) {
+  return String(card?.step_id || "").split(":")[1] || "";
+}
+
+function showDialogCard(node) {
+  const dialog = byId("question-dialog");
+  byId("question-dialog-body").replaceChildren(node);
+  if (!dialog.open) dialog.showModal();
+}
+
+function interviewContext() {
+  return {
+    baseGeneration: baseActivationGate.current(),
+    baseId: currentBase?.id || "",
+    experienceId: currentSession?.active_experience_id || "",
+    sessionId: currentSession?.id || "",
+  };
+}
+
+function isInterviewContext(context) {
+  return baseActivationGate.isCurrent(context.baseGeneration)
+    && currentBase?.id === context.baseId
+    && currentSession?.id === context.sessionId;
+}
+
+function setInterviewBusy(busy) {
+  interviewBusy = busy;
+  const dialog = byId("question-dialog");
+  for (const control of dialog.querySelectorAll("button, input, textarea")) {
+    control.disabled = busy;
   }
 }
 
-async function ensureSession(context) {
-  if (!isCurrentExperienceContext(context)) return null;
-  if (currentSession) return currentSession;
-  const session = await api.createSession(context.baseId, context.experienceId);
-  if (!isCurrentExperienceContext(context)) return null;
+function presentInterviewFlow(card) {
+  const experienceId = interviewExperienceId(card);
+  if (!experienceId) return;
+  if (currentSession && currentSession.active_experience_id === experienceId) {
+    const pending = Object.values(currentSession.pending_proposals || {});
+    if (pending.length) {
+      showDialogCard(interviewProposalCard(pending.at(-1)));
+      return;
+    }
+    if (currentSession.current_question) {
+      showDialogCard(interviewQuestionCard(currentSession.current_question));
+      return;
+    }
+    showDialogCard(interviewDoneCard(card));
+    return;
+  }
+  showDialogCard(interviewStartCard(card));
+}
+
+function interviewStartCard(card) {
+  const article = element("article", "question-card");
+  article.dataset.stepId = card.step_id;
+  article.append(
+    element("p", "question-prompt", card.prompt),
+    element(
+      "p", "question-hint",
+      "导师会一步步追问：做了什么、怎么做的、结果如何。每个问题都有选项，点选即可，也可以自己写。",
+    ),
+  );
+  const actions = element("div", "question-actions");
+  const start = element("button", "primary", "开始访谈");
+  start.type = "button";
+  start.addEventListener("click", () => beginInterviewFlow(card));
+  const skip = element("button", "text-button", "先跳过这段");
+  skip.type = "button";
+  skip.addEventListener("click", () => skipQuestionCard(card));
+  actions.append(start, skip);
+  article.append(actions);
+  return article;
+}
+
+async function ensureInterviewSession(experienceId) {
+  if (!currentBase) return null;
+  if (currentSession && currentSession.active_experience_id === experienceId) {
+    return currentSession;
+  }
+  const saved = baseSelection(state, currentBase.id);
+  const preferred = saved.experienceId === experienceId ? saved.sessionId : "";
+  const existing = await recoverSession(currentBase.id, experienceId, preferred);
+  let session = existing;
+  if (!session) session = await api.createSession(currentBase.id, experienceId);
   currentSession = session;
-  commitSelection(context.baseId, {
-    ...baseSelection(state, context.baseId),
-    experienceId: context.experienceId,
-    sessionId: session.id,
-  });
+  commitSelection(currentBase.id, { ...saved, experienceId, sessionId: session.id });
   return session;
 }
 
-async function startInterview() {
-  if (sessionTransitionGate.isTransitioning()) return;
-  const button = byId("start-interview");
-  const context = captureExperienceContext();
-  button.disabled = true;
-  button.textContent = "正在准备问题…";
+async function beginInterviewFlow(card) {
+  if (!currentBase || interviewBusy) return;
+  const experienceId = interviewExperienceId(card);
+  if (!experienceId) return;
+  const start = byId("question-dialog-body").querySelector("button.primary");
+  if (start) {
+    start.disabled = true;
+    start.textContent = "正在准备问题…";
+  }
   try {
-    const session = await ensureSession(context);
-    if (!session || !isCurrentExperienceContext(context)) return;
-    await api.currentQuestion(session.id);
-    const updated = await api.getSession(session.id);
-    if (!isCurrentExperienceContext(context)) return;
-    currentSession = updated;
+    const session = await ensureInterviewSession(experienceId);
+    if (!session || !currentBase) return;
+    const question = await api.currentQuestion(session.id);
+    if (!currentBase || currentSession?.id !== session.id) return;
+    currentSession = await api.getSession(session.id);
+    currentExperienceQuality = await loadCurrentExperienceQuality(currentBase.id, experienceId);
     renderConversation();
+    if (question) showDialogCard(interviewQuestionCard(question));
+    else showDialogCard(interviewDoneCard(card));
   } catch (error) {
-    if (!isCurrentExperienceContext(context)) return;
     showToast(error instanceof ApiError ? error.message : "访谈启动失败");
-    if (button.isConnected) {
-      button.disabled = false;
-      button.textContent = "重试开始访谈";
+    const fresh = byId("question-dialog-body").querySelector("button.primary");
+    if (fresh) {
+      fresh.disabled = false;
+      fresh.textContent = "开始访谈";
     }
   }
+}
+
+function interviewQuestionCard(question) {
+  const article = element("article", "question-card interview-card");
+  const dim = DIMENSIONS.find(([key]) => key === question.dimension);
+  article.append(
+    element("p", "question-prompt", question.text),
+    element("p", "question-hint", `当前追问：${dim ? dim[1] : question.dimension}`),
+  );
+  const options = question.options || [];
+  if (options.length) {
+    const chips = element("div", "choice-options chips");
+    for (const option of options) {
+      const chip = element("button", "chip-button option-chip", option);
+      chip.type = "button";
+      chip.addEventListener("click", () => submitInterviewAnswer(option));
+      chips.append(chip);
+    }
+    article.append(chips);
+  }
+  const freeRow = element("div", "chip-free-row");
+  const input = document.createElement("input");
+  input.placeholder = "或者自己写一段";
+  const send = element("button", "primary", "回答");
+  send.type = "button";
+  const sendFree = () => {
+    const text = input.value.trim();
+    if (text) submitInterviewAnswer(text);
+  };
+  send.addEventListener("click", sendFree);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") sendFree();
+  });
+  freeRow.append(input, send);
+  article.append(freeRow);
+  const actions = element("div", "question-actions");
+  const unknown = element("button", "text-button", "暂时想不到");
+  unknown.type = "button";
+  unknown.addEventListener("click", () => interviewUnknown(question.dimension));
+  actions.append(unknown);
+  article.append(actions);
+  return article;
+}
+
+function interviewProposalCard(proposal) {
+  const article = element("article", "question-card proposal-card");
+  const dim = DIMENSIONS.find(([key]) => key === proposal.dimension);
+  article.append(element(
+    "p", "question-prompt",
+    `导师把刚才的回答整理成以下事实（${dim ? dim[1] : proposal.dimension}），确认后写入这段经历：`,
+  ));
+  const list = element("ul", "proposal-values");
+  for (const value of proposal.values || []) {
+    const item = element("li", "", value.text);
+    if (value.confidence === "estimated") item.append(element("span", "badge", "估算"));
+    if (value.sensitive) item.append(element("span", "badge warning", "敏感"));
+    list.append(item);
+  }
+  article.append(list);
+  const actions = element("div", "question-actions");
+  const confirm = element("button", "primary", "确认事实，继续追问");
+  confirm.type = "button";
+  confirm.addEventListener("click", () => confirmInterviewProposal(proposal.id));
+  const reject = element("button", "", "这不是我的意思");
+  reject.type = "button";
+  reject.addEventListener("click", () => rejectInterviewProposal(proposal.id));
+  actions.append(confirm, reject);
+  article.append(actions);
+  return article;
+}
+
+function interviewDoneCard(card) {
+  const article = element("article", "question-card complete-card");
+  const completed = currentExperienceQuality?.present_dimensions;
+  article.append(element(
+    "p", "question-prompt",
+    Number.isInteger(completed)
+      ? `这段经历目前收集到 ${completed}/6 个维度的事实。可以继续补充，也可以先跳过。`
+      : "这段经历暂时聊到这里。可以继续补充，也可以先跳过。",
+  ));
+  const actions = element("div", "question-actions");
+  const more = element("button", "primary", "再补充一点");
+  more.type = "button";
+  more.addEventListener("click", async () => {
+    if (!currentSession || interviewBusy) return;
+    more.disabled = true;
+    try {
+      const question = await api.currentQuestion(currentSession.id);
+      if (!currentBase || !currentSession) return;
+      currentSession = await api.getSession(currentSession.id);
+      if (question) showDialogCard(interviewQuestionCard(question));
+      else {
+        more.disabled = false;
+        showToast("暂时没有更多可追问的维度了");
+      }
+    } catch (error) {
+      more.disabled = false;
+      showToast(error instanceof ApiError ? error.message : "追问失败");
+    }
+  });
+  const skip = element("button", "text-button", "先跳过，继续下一项");
+  skip.type = "button";
+  skip.addEventListener("click", () => skipQuestionCard(card));
+  actions.append(more, skip);
+  article.append(actions);
+  return article;
+}
+
+async function refreshAfterInterviewTurn() {
+  const experienceId = currentSession?.active_experience_id;
+  if (currentBase && experienceId) {
+    const [base, quality] = await Promise.all([
+      api.getFactBase(currentBase.id),
+      loadCurrentExperienceQuality(currentBase.id, experienceId),
+    ]);
+    replaceBase(base);
+    currentExperienceQuality = quality;
+    await renderFactBase();
+  }
+  renderConversation();
+}
+
+async function submitInterviewAnswer(message) {
+  if (!currentBase || !currentSession || interviewBusy) return;
+  const context = interviewContext();
+  setInterviewBusy(true);
+  try {
+    const turn = await api.answer(context.sessionId, message);
+    if (!isInterviewContext(context)) return;
+    currentSession = await api.getSession(context.sessionId);
+    await refreshAfterInterviewTurn();
+    if (turn.proposal) {
+      showDialogCard(interviewProposalCard(turn.proposal));
+      return;
+    }
+    const question = await api.currentQuestion(context.sessionId);
+    if (!isInterviewContext(context)) return;
+    currentSession = await api.getSession(context.sessionId);
+    await refreshAfterInterviewTurn();
+    if (question) showDialogCard(interviewQuestionCard(question));
+    else await finishInterviewFlow(context.experienceId);
+  } catch (error) {
+    if (!isInterviewContext(context)) return;
+    showToast(error instanceof ApiError ? error.message : "回答保存失败");
+  } finally {
+    if (isInterviewContext(context)) setInterviewBusy(false);
+  }
+}
+
+async function confirmInterviewProposal(proposalId) {
+  if (!currentBase || !currentSession || interviewBusy) return;
+  const context = interviewContext();
+  setInterviewBusy(true);
+  try {
+    const turn = await api.confirmProposal(context.sessionId, proposalId);
+    if (!isInterviewContext(context)) return;
+    currentSession = await api.getSession(context.sessionId);
+    await refreshAfterInterviewTurn();
+    if (turn.question) {
+      showDialogCard(interviewQuestionCard(turn.question));
+      return;
+    }
+    await finishInterviewFlow(context.experienceId);
+  } catch (error) {
+    if (!isInterviewContext(context)) return;
+    showToast(error instanceof ApiError ? error.message : "事实确认失败");
+  } finally {
+    if (isInterviewContext(context)) setInterviewBusy(false);
+  }
+}
+
+async function rejectInterviewProposal(proposalId) {
+  if (!currentBase || !currentSession || interviewBusy) return;
+  const context = interviewContext();
+  setInterviewBusy(true);
+  try {
+    await api.rejectProposal(context.sessionId, proposalId);
+    if (!isInterviewContext(context)) return;
+    currentSession = await api.getSession(context.sessionId);
+    const question = await api.currentQuestion(context.sessionId);
+    if (!isInterviewContext(context)) return;
+    currentSession = await api.getSession(context.sessionId);
+    await refreshAfterInterviewTurn();
+    if (question) showDialogCard(interviewQuestionCard(question));
+    else await finishInterviewFlow(context.experienceId);
+  } catch (error) {
+    if (!isInterviewContext(context)) return;
+    showToast(error instanceof ApiError ? error.message : "事实退回失败");
+  } finally {
+    if (isInterviewContext(context)) setInterviewBusy(false);
+  }
+}
+
+async function interviewUnknown(dimension) {
+  if (!currentBase || !currentSession || interviewBusy) return;
+  const context = interviewContext();
+  setInterviewBusy(true);
+  try {
+    await api.recordUnknown(context.sessionId, dimension);
+    if (!isInterviewContext(context)) return;
+    const question = await api.currentQuestion(context.sessionId);
+    if (!isInterviewContext(context)) return;
+    currentSession = await api.getSession(context.sessionId);
+    await refreshAfterInterviewTurn();
+    if (question) showDialogCard(interviewQuestionCard(question));
+    else await finishInterviewFlow(context.experienceId);
+  } catch (error) {
+    if (!isInterviewContext(context)) return;
+    showToast(error instanceof ApiError ? error.message : "暂时无法跳过这个问题");
+  } finally {
+    if (isInterviewContext(context)) setInterviewBusy(false);
+  }
+}
+
+async function finishInterviewFlow(experienceId) {
+  await refreshQuestionnaire();
+  if (!currentBase) return;
+  renderConversation();
+  const next = questionnaireState?.next || null;
+  if (next && next.kind === "interview" && interviewExperienceId(next) === experienceId) {
+    showDialogCard(interviewDoneCard(next));
+    return;
+  }
+  presentQuestionCard(next);
 }
 
 async function submitAnswer(event) {
   event.preventDefault();
-  if (!currentBase || sessionTransitionGate.isTransitioning()) return;
+  if (!currentBase || interviewBusy) return;
   const input = byId("chat-input");
   const message = input.value.trim();
   if (!message) return;
-  const context = captureExperienceContext();
   const submit = event.currentTarget.querySelector("button[type=submit]");
   submit.disabled = true;
   submit.textContent = "正在发送…";
-  let typing = null;
   try {
-    const session = await ensureSession(context);
-    if (!session || !isCurrentExperienceContext(context)) return;
-    const messagesBox = byId("chat-messages");
-    messagesBox.append(element("div", "message user-message", message));
-    typing = element("div", "message assistant-message typing-message");
-    typing.setAttribute("aria-live", "polite");
-    messagesBox.append(typing);
-    typing.textContent = "导师正在提炼";
-    messagesBox.scrollTop = messagesBox.scrollHeight;
-    await api.answer(session.id, message);
-    if (!isCurrentExperienceContext(context)) return;
+    if (!currentSession) {
+      const experienceId = state.experienceId
+        || currentBase.experiences.at(-1)?.id
+        || "";
+      if (!experienceId) {
+        showToast("先添加一段经历，再开始访谈");
+        return;
+      }
+      const session = await ensureInterviewSession(experienceId);
+      if (!session) return;
+    }
     input.value = "";
-    const updated = await api.getSession(session.id);
-    if (!isCurrentExperienceContext(context)) return;
-    currentSession = updated;
-    renderConversation();
-    typing = null;
+    await submitInterviewAnswer(message);
   } catch (error) {
-    if (!isCurrentExperienceContext(context)) return;
-    if (error instanceof ApiError && error.category === "unavailable") {
-      showToast("回答已保存，导师暂时无法提炼；稍后可以继续");
-      const updated = state.sessionId ? await api.getSession(state.sessionId) : currentSession;
-      if (!isCurrentExperienceContext(context)) return;
-      currentSession = updated;
-      renderConversation();
-      input.value = "";
-    } else {
-      if (typing) typing.remove();
-      showToast(error instanceof ApiError ? error.message : "回答发送失败");
-    }
+    showToast(error instanceof ApiError ? error.message : "回答发送失败");
   } finally {
-    if (isCurrentExperienceContext(context)) {
-      submit.disabled = false;
-      submit.textContent = "发送回答";
+    const fresh = byId("chat-composer")?.querySelector('button[type="submit"]');
+    if (fresh) {
+      fresh.disabled = false;
+      fresh.textContent = "发送回答";
     }
-  }
-}
-
-async function confirmFact(proposalId) {
-  if (sessionTransitionGate.isTransitioning()) return;
-  const context = captureExperienceContext();
-  const sessionId = currentSession?.id;
-  if (!sessionId) return;
-  try {
-    await api.confirmProposal(sessionId, proposalId);
-    const [base, session, quality] = await Promise.all([
-      api.getFactBase(context.baseId),
-      api.getSession(sessionId),
-      loadCurrentExperienceQuality(context.baseId, context.experienceId),
-    ]);
-    if (!isCurrentExperienceContext(context)) return;
-    replaceBase(base);
-    currentSession = session;
-    currentExperienceQuality = quality;
-    renderConversation();
-    await renderFactBase(context.baseGeneration);
-  } catch (error) {
-    if (!isCurrentExperienceContext(context)) return;
-    showToast(error instanceof ApiError ? error.message : "事实确认失败");
-  }
-}
-
-async function rejectFact(proposalId) {
-  if (sessionTransitionGate.isTransitioning()) return;
-  const context = captureExperienceContext();
-  const sessionId = currentSession?.id;
-  if (!sessionId) return;
-  try {
-    const session = await api.rejectProposal(sessionId, proposalId);
-    if (!isCurrentExperienceContext(context)) return;
-    currentSession = session;
-    renderConversation();
-  } catch (error) {
-    if (!isCurrentExperienceContext(context)) return;
-    showToast(error instanceof ApiError ? error.message : "事实退回失败");
-  }
-}
-
-function quickAnswer(text) {
-  const input = byId("chat-input");
-  const composer = byId("chat-composer");
-  if (!input || !composer) return;
-  input.value = text;
-  composer.requestSubmit();
-}
-
-async function recordUnknown() {
-  if (sessionTransitionGate.isTransitioning()) return;
-  const question = currentSession?.current_question;
-  if (!question) return;
-  const context = captureExperienceContext();
-  const sessionId = currentSession.id;
-  try {
-    await api.recordUnknown(sessionId, question.dimension);
-    await api.currentQuestion(sessionId);
-    const session = await api.getSession(sessionId);
-    if (!isCurrentExperienceContext(context)) return;
-    currentSession = session;
-    renderConversation();
-  } catch (error) {
-    if (!isCurrentExperienceContext(context)) return;
-    showToast(error instanceof ApiError ? error.message : "暂时无法跳过这个问题");
   }
 }
 

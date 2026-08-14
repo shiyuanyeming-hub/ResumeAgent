@@ -28,6 +28,7 @@ from resume_agent.domain.questionnaire_steps import (
     TARGET_STEPS,
 )
 from resume_agent.domain.year_month import is_year_month, year_month_le
+from resume_agent.application.mentor_guide import OFFLINE_FOLLOWUP_OPTIONS
 
 
 class QuestionKind(str, Enum):
@@ -61,8 +62,9 @@ class SectionProgress(BaseModel):
 class QuestionnaireEngine:
     """Choose the next unsatisfied question in section order."""
 
-    def __init__(self, options_providers: Optional[Dict[str, Callable]] = None):
+    def __init__(self, options_providers: Optional[Dict[str, Callable]] = None, guide=None):
         self.options_providers = options_providers or {}
+        self.guide = guide
 
     def next_card(self, base, state, version=None):
         for section in SECTION_ORDER:
@@ -211,7 +213,9 @@ class QuestionnaireEngine:
         if not experience.role and not self._skipped(state, f"experience:{experience.id}:role"):
             return self._card(
                 f"experience:{experience.id}:role", "experience",
-                QuestionKind.TEXT, "你当时的角色是？（例如：数据分析实习生）", skippable=False,
+                QuestionKind.CHOICE_FREE, "你当时担任的角色是？（点选或自己填写）",
+                options=self._role_options(base, experience),
+                skippable=False,
             )
         if not experience.start and not self._skipped(state, f"experience:{experience.id}:period"):
             return self._card(
@@ -227,10 +231,22 @@ class QuestionnaireEngine:
             return self._card(
                 f"experience:{experience.id}:interview", "experience",
                 QuestionKind.INTERVIEW,
-                "导师会继续追问这段经历的具体内容，请回答左侧问题。",
+                "导师会针对这段经历一步步追问（每个问题都有选项可点），攒够证据就能写进简历。",
                 skippable=True,
             )
         return None
+
+    def _role_options(self, base, experience):
+        """角色候选：优先 LLM 动态生成（结合岗位与经历类型），失败走离线模板。"""
+        if self.guide is not None:
+            options = self.guide.followup_options(
+                base.target.role or "",
+                f"{experience.organization or experience.type.value} · 担任角色",
+                "role",
+            )
+            if options:
+                return options
+        return list(OFFLINE_FOLLOWUP_OPTIONS.get("role", []))
 
     def _skills_card(self, base, state):
         if base.profile.skills or self._skipped(state, "skills:tags"):

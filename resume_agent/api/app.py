@@ -149,7 +149,8 @@ def create_app(
                 "majors": lambda base, state: catalog_majors(),
                 "courses": lambda base, state: list(state.course_options),
                 "skills": lambda base, state: list(state.skill_options),
-            }
+            },
+            guide=mentor_guide,
         ),
         course_advisor=course_advisor,
         skill_advisor=skill_advisor,

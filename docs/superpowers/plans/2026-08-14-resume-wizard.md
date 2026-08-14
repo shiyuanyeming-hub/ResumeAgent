@@ -1174,6 +1174,12 @@ def test_engine_summary_card_reads_version_options():
     base.educations.append(Education(school="某大学", major="统计", start="2020-09"))
     experience = base.add_experience("星河科技", "实习生")
     experience.start = "2024-06"
+    experience.statements[QualityDimension.CONTEXT] = [
+        FactValue(text="业务需要留存分析", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.RESPONSIBILITY] = [
+        FactValue(text="负责看板搭建", confidence=ConfidenceStatus.CONFIRMED)
+    ]
     experience.statements[QualityDimension.ACTION] = [
         FactValue(text="搭建看板", confidence=ConfidenceStatus.CONFIRMED)
     ]
@@ -1251,6 +1257,7 @@ def test_experience_choice_creates_typed_experience():
         questionnaire.answer(base.id, step_id, value=value)
     questionnaire.skip(base.id, "profile:location")
     questionnaire.skip(base.id, "profile:links")
+    questionnaire.skip(base.id, "target:city")
     questionnaire.skip(base.id, "education:add")
     card = questionnaire.next_card(base.id)
     assert card.step_id == "experience:add"
@@ -2919,6 +2926,7 @@ def test_course_options_merge_catalog_and_advisor():
     questionnaire.skip(base.id, "profile:location")
     questionnaire.skip(base.id, "profile:links")
     questionnaire.answer(base.id, "target:role", value="数据分析师")
+    questionnaire.skip(base.id, "target:city")
     questionnaire.answer(base.id, "education:add", value="开始填写")
     questionnaire.answer(base.id, "education:new:school", value="某大学")
     loaded = questionnaire.fact_bases.get(base.id)

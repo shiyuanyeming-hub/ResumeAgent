@@ -2242,7 +2242,7 @@ git commit -m "feat: expose questionnaire and education endpoints"
 ### Task 8: 前端 API 方法与纯函数模块
 
 **Files:**
-- Modify: `resume_agent/web/api.js`（4 个新方法）
+- Modify: `resume_agent/web/api.js`（3 个新方法）
 - Create: `resume_agent/web/questionnaire.js`
 - Test: `tests/web/api.test.mjs`（追加）、`tests/web/questionnaire.test.mjs`（新建）
 

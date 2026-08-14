@@ -620,6 +620,8 @@ function renderConversation() {
   setSessionTransitionUi();
 }
 
+const dismissedCompletionBases = new Set();
+
 function sectionNavElement() {
   const nav = element("nav", "section-nav");
   nav.setAttribute("aria-label", "简历章节");
@@ -632,6 +634,10 @@ function sectionNavElement() {
     );
     chip.type = "button";
     chip.title = item.done ? "已完成" : "待完善";
+    chip.addEventListener("click", () => {
+      if (questionnaireState?.next) presentQuestionCard(questionnaireState.next);
+      else showCompletionCard(true);
+    });
     nav.append(chip);
   }
   return nav;
@@ -639,6 +645,32 @@ function sectionNavElement() {
 
 function questionAreaElement() {
   return element("div", "question-area");
+}
+
+function showCompletionCard(force = false) {
+  const dialog = byId("question-dialog");
+  const body = byId("question-dialog-body");
+  const baseId = currentBase?.id || "";
+  if (!force && dismissedCompletionBases.has(baseId)) {
+    if (dialog.open) dialog.close();
+    return;
+  }
+  const done = element("article", "question-card complete-card");
+  done.append(element(
+    "p", "question-prompt",
+    "🎉 各章节已收集完毕，可在右侧预览微调并导出 PDF 等格式。",
+  ));
+  const actions = element("div", "question-actions");
+  const close = element("button", "primary", "关闭，去右侧微调");
+  close.type = "button";
+  close.addEventListener("click", () => {
+    dismissedCompletionBases.add(baseId);
+    dialog.close();
+  });
+  actions.append(close);
+  done.append(actions);
+  body.replaceChildren(done);
+  if (!dialog.open) dialog.showModal();
 }
 
 function presentQuestionCard(card) {
@@ -655,13 +687,7 @@ function presentQuestionCard(card) {
   }
   const progress = questionnaireState?.progress || [];
   if (progress.length && progress.every((item) => item.done)) {
-    const done = element("article", "question-card complete-card");
-    done.append(element(
-      "p", "question-prompt",
-      "🎉 各章节已收集完毕，可在右侧预览微调并导出 PDF 等格式。",
-    ));
-    body.replaceChildren(done);
-    if (!dialog.open) dialog.showModal();
+    showCompletionCard();
     return;
   }
   const unfinished = progress.filter((item) => item.section !== "summary" && !item.done);
@@ -2283,6 +2309,14 @@ byId("primary-tabs").addEventListener("keydown", (event) => {
   tabs[nextIndex].click();
 });
 byId("settings-button").addEventListener("click", () => byId("settings-dialog").showModal());
+byId("question-dialog").addEventListener("click", (event) => {
+  // 点击弹窗背景关闭「完成/访谈完成」类卡片，避免模态挡住整个页面
+  if (event.target !== event.currentTarget) return;
+  const card = byId("question-dialog-body").querySelector(".complete-card");
+  if (!card) return;
+  if (currentBase) dismissedCompletionBases.add(currentBase.id);
+  event.currentTarget.close();
+});
 byId("base-select").addEventListener("change", async (event) => {
   const select = event.currentTarget;
   const base = bases.find((item) => item.id === select.value);

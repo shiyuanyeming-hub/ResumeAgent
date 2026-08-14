@@ -1,7 +1,11 @@
 from resume_agent.application.interview_service import InterviewService
 from resume_agent.agents.mentor import DeterministicQuestionWriter
+from resume_agent.application.question_planner import QuestionPlanner
 from resume_agent.domain.models import (
     CareerFactBase,
+    FactProposal,
+    FactValue,
+    InterviewQuestion,
     InterviewSession,
     QualityDimension,
 )
@@ -141,3 +145,80 @@ def test_confirmation_rejects_unknown_proposal():
         assert "proposal not pending" in str(error)
     else:
         raise AssertionError("unknown proposal must be rejected")
+
+
+class RecordingAudit:
+    def __init__(self):
+        self.predicted = []
+
+    def propose(self, message, session, base, predicted_dimension=None):
+        self.predicted.append(predicted_dimension)
+        return FactProposal(
+            fact_base_revision=base.revision,
+            experience_id=session.active_experience_id,
+            dimension=QualityDimension.ACTION,
+            values=[FactValue(text=message)],
+            next_question="这条行动的结果是什么？",
+        )
+
+
+class RecordingWriter:
+    def __init__(self):
+        self.calls = 0
+
+    def write(self, plan, experience, target):
+        self.calls += 1
+        return f"请补充{plan.dimension.value}。"
+
+
+def interview_fixture():
+    base = CareerFactBase()
+    experience = base.add_experience("星河科技", "实习生")
+    session = InterviewSession(
+        fact_base_id=base.id, active_experience_id=experience.id
+    )
+    audit = RecordingAudit()
+    writer = RecordingWriter()
+    service = InterviewService(
+        InMemoryFactBaseRepository([base]),
+        InMemorySessionRepository([session]),
+        audit,
+        writer,
+        QuestionPlanner(),
+    )
+    return service, session, audit, writer
+
+
+def test_answer_receives_predicted_dimension_excluding_asked():
+    service, session, audit, _ = interview_fixture()
+    session.current_question = InterviewQuestion(
+        dimension=QualityDimension.ACTION, text="你做了什么？", priority=1.0, escalation="direct"
+    )
+    service.sessions.save(session)
+    service.answer(session.id, "我搭了看板")
+    assert audit.predicted == [QualityDimension.RESULT] or audit.predicted[0] != QualityDimension.ACTION
+    assert audit.predicted[0] is not None
+
+
+def test_confirm_uses_prewritten_question_without_writer_call():
+    service, session, _, writer = interview_fixture()
+    service.answer(session.id, "我搭了看板")
+    stored = service.get_session(session.id)
+    proposal = list(stored.pending_proposals.values())[0]
+    turn = service.confirm(stored.id, proposal.id)
+    assert turn.question is not None
+    assert turn.question.text == "这条行动的结果是什么？"
+    assert writer.calls == 0
+    updated = service.get_session(session.id)
+    assert updated.pending_next_text == ""
+    assert updated.pending_next_dimension is None
+
+
+def test_reject_clears_pending_next_question():
+    service, session, _, writer = interview_fixture()
+    service.answer(session.id, "我搭了看板")
+    stored = service.get_session(session.id)
+    proposal = list(stored.pending_proposals.values())[0]
+    service.reject(stored.id, proposal.id)
+    service.next_question(session.id)
+    assert writer.calls == 1

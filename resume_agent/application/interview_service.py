@@ -110,7 +110,10 @@ class InterviewService:
         session.current_question = None
         session.updated_at = utc_now()
         self.sessions.save(session)
-        proposal = self.audit_agent.propose(message, session, base)
+        predicted = self._predict_next_dimension(session, base, asked_dimension)
+        proposal = self.audit_agent.propose(
+            message, session, base, predicted_dimension=predicted
+        )
         if proposal.experience_id != session.active_experience_id:
             raise ValueError("agent proposal targeted a different experience")
         if proposal.fact_base_revision != base.revision:
@@ -124,9 +127,34 @@ class InterviewService:
                 session.attempts.get(asked_dimension, 0) + 1
             )
         session.pending_proposals[proposal.id] = proposal
+        session.pending_next_text = proposal.next_question
+        session.pending_next_dimension = predicted
         session.updated_at = utc_now()
         self.sessions.save(session)
         return InterviewTurn(proposal=proposal)
+
+    def _predict_next_dimension(
+        self,
+        session: InterviewSession,
+        base: CareerFactBase,
+        asked_dimension: Optional[QualityDimension],
+    ) -> Optional[QualityDimension]:
+        if session.active_experience_id is None:
+            return None
+        experience = base.get_experience(session.active_experience_id)
+        history = QuestionHistory(
+            attempts=session.attempts,
+            skipped=session.skipped_dimensions,
+        )
+        ranked = self.planner.rank(experience, PlanningSignals(), history)
+        candidates = {
+            dimension: priority
+            for dimension, priority in ranked.items()
+            if dimension is not asked_dimension
+        }
+        if not candidates:
+            return None
+        return max(candidates, key=candidates.get)
 
     def confirm(self, session_id: UUID, proposal_id: UUID) -> InterviewTurn:
         session = self.sessions.get(session_id)
@@ -159,6 +187,8 @@ class InterviewService:
         if proposal_id not in session.pending_proposals:
             raise KeyError(f"proposal not pending: {proposal_id}")
         del session.pending_proposals[proposal_id]
+        session.pending_next_text = ""
+        session.pending_next_dimension = None
         session.updated_at = utc_now()
         self.sessions.save(session)
         return self.sessions.get(session_id)
@@ -221,9 +251,17 @@ class InterviewService:
         )
         if plan is None:
             return None
-        text = self.question_writer.write(plan, experience, base.target).strip()
-        if not text:
-            raise ValueError("question writer returned an empty question")
+        if (
+            session.pending_next_text
+            and plan.dimension == session.pending_next_dimension
+        ):
+            text = session.pending_next_text
+        else:
+            text = self.question_writer.write(plan, experience, base.target).strip()
+            if not text:
+                raise ValueError("question writer returned an empty question")
+        session.pending_next_text = ""
+        session.pending_next_dimension = None
         return MentorQuestion(
             dimension=plan.dimension,
             text=text,

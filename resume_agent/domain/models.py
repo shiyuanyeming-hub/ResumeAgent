@@ -252,6 +252,15 @@ class InterviewSession(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
+class QuestionnaireState(BaseModel):
+    fact_base_id: UUID
+    skipped: List[str] = Field(default_factory=list)
+    completed_sections: List[str] = Field(default_factory=list)
+    edited_education_id: Optional[UUID] = None
+    edited_experience_id: Optional[UUID] = None
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class VersionSnippet(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     text: str

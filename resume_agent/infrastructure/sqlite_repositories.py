@@ -9,6 +9,7 @@ from resume_agent.application.ports import RevisionConflict
 from resume_agent.domain.models import (
     CareerFactBase,
     InterviewSession,
+    QuestionnaireState,
     ResumeVersion,
     utc_now,
 )
@@ -55,6 +56,11 @@ class SQLiteStore:
 
                 CREATE INDEX IF NOT EXISTS idx_versions_fact_base
                     ON resume_versions (fact_base_id);
+
+                CREATE TABLE IF NOT EXISTS questionnaires (
+                    fact_base_id TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL
+                );
                 """
             )
             columns = {
@@ -287,3 +293,30 @@ class SQLiteVersionRepository:
             )
         if cursor.rowcount != 1:
             raise KeyError(f"resume version not found: {version_id}")
+
+
+class SQLiteQuestionnaireRepository:
+    def __init__(self, store: SQLiteStore) -> None:
+        self.store = store
+
+    def get(self, fact_base_id: UUID) -> QuestionnaireState:
+        with self.store.connect() as connection:
+            row = connection.execute(
+                "SELECT payload FROM questionnaires WHERE fact_base_id = ?",
+                (str(fact_base_id),),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"questionnaire state not found: {fact_base_id}")
+        return QuestionnaireState.model_validate_json(row["payload"])
+
+    def save(self, state: QuestionnaireState) -> None:
+        with self.store.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO questionnaires (fact_base_id, payload)
+                VALUES (?, ?)
+                ON CONFLICT(fact_base_id) DO UPDATE SET
+                    payload = excluded.payload
+                """,
+                (str(state.fact_base_id), state.model_dump_json()),
+            )

@@ -9,6 +9,7 @@ from resume_agent.domain.models import (
     FactValue,
     InterviewSession,
     QualityDimension,
+    QuestionnaireState,
     ResumeVersion,
 )
 
@@ -72,6 +73,19 @@ class InMemoryVersionRepository:
 
     def delete(self, version_id: UUID) -> None:
         del self.items[version_id]
+
+
+class InMemoryQuestionnaireRepository:
+    def __init__(self, states=()):
+        self.items = {state.fact_base_id: deepcopy(state) for state in states}
+
+    def get(self, fact_base_id: UUID):
+        if fact_base_id not in self.items:
+            raise KeyError(f"questionnaire state not found: {fact_base_id}")
+        return deepcopy(self.items[fact_base_id])
+
+    def save(self, state) -> None:
+        self.items[state.fact_base_id] = deepcopy(state)
 
 
 class StubAuditAgent:

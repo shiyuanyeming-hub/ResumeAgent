@@ -8,10 +8,12 @@ from resume_agent.application.ports import RevisionConflict
 from resume_agent.domain.models import (
     CareerFactBase,
     InterviewSession,
+    QuestionnaireState,
     ResumeVersion,
 )
 from resume_agent.infrastructure.sqlite_repositories import (
     SQLiteFactBaseRepository,
+    SQLiteQuestionnaireRepository,
     SQLiteSessionRepository,
     SQLiteStore,
     SQLiteVersionRepository,
@@ -128,3 +130,18 @@ def test_concurrent_version_activation_keeps_exactly_one_active(tmp_path):
 
     active = [version for version in repository.list(base.id) if version.is_active]
     assert len(active) == 1
+
+
+def test_questionnaire_state_roundtrip(tmp_path):
+    store = SQLiteStore(tmp_path / "resume-agent.db")
+    repository = SQLiteQuestionnaireRepository(store)
+    fact_base_id = uuid4()
+    with pytest.raises(KeyError):
+        repository.get(fact_base_id)
+    state = QuestionnaireState(fact_base_id=fact_base_id)
+    state.skipped.append("profile:links")
+    state.completed_sections.append("education")
+    repository.save(state)
+    loaded = repository.get(fact_base_id)
+    assert loaded.skipped == ["profile:links"]
+    assert loaded.completed_sections == ["education"]

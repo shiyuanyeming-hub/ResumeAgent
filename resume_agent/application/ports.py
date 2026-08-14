@@ -11,6 +11,7 @@ from resume_agent.domain.models import (
     FactProposal,
     InterviewSession,
     QualityDimension,
+    QuestionnaireState,
     ResumeVersion,
 )
 
@@ -68,3 +69,9 @@ class VersionRepository(Protocol):
     def activate(self, version_id: UUID) -> ResumeVersion: ...
 
     def delete(self, version_id: UUID) -> None: ...
+
+
+class QuestionnaireRepository(Protocol):
+    def get(self, fact_base_id: UUID) -> QuestionnaireState: ...
+
+    def save(self, state: QuestionnaireState) -> None: ...

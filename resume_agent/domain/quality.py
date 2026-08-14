@@ -4,7 +4,7 @@ from typing import Dict
 
 from pydantic import BaseModel, ConfigDict
 
-from .models import Experience, QualityDimension, Specificity
+from .models import CareerFactBase, Experience, QualityDimension, Specificity
 
 
 class QualityReport(BaseModel):
@@ -42,3 +42,31 @@ def evaluate_experience(experience: Experience) -> QualityReport:
         total=sum(scores.values()),
         passes_gate=passes_gate,
     )
+
+
+class ProfileCompleteness(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    sections: Dict[str, bool]
+    complete: bool
+
+
+def evaluate_profile_completeness(
+    base: CareerFactBase,
+    selected_summary: str = "",
+) -> ProfileCompleteness:
+    sections = {
+        "profile": bool(base.profile.name and base.profile.email and base.profile.phone),
+        "target": bool(base.target.role),
+        "education": any(
+            education.school and education.major and education.start
+            for education in base.educations
+        ),
+        "experience": any(
+            evaluate_experience(experience).passes_gate
+            for experience in base.experiences
+        ),
+        "skills": bool(base.profile.skills),
+        "summary": bool(selected_summary),
+    }
+    return ProfileCompleteness(sections=sections, complete=all(sections.values()))

@@ -9,6 +9,8 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from resume_agent.domain.year_month import is_year_month
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -32,6 +34,13 @@ class QualityDimension(str, Enum):
     METHOD = "method"
     RESULT = "result"
     EVIDENCE = "evidence"
+
+
+class ExperienceType(str, Enum):
+    INTERNSHIP = "internship"
+    WORK = "work"
+    PROJECT = "project"
+    CAMPUS = "campus"
 
 
 class InterviewPhase(str, Enum):
@@ -81,6 +90,7 @@ class Experience(BaseModel):
     statements: Dict[QualityDimension, List[FactValue]] = Field(
         default_factory=empty_statements
     )
+    type: ExperienceType = ExperienceType.WORK
     linked_skills: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -92,6 +102,40 @@ class Experience(BaseModel):
         if not stripped:
             raise ValueError("organization and role must not be empty")
         return stripped
+
+
+class Education(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    school: str
+    major: str = ""
+    degree: str = ""
+    start: str = ""
+    end: Optional[str] = None
+    core_courses: List[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("school")
+    @classmethod
+    def validate_school(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("school must not be empty")
+        return stripped
+
+    @field_validator("start")
+    @classmethod
+    def validate_start(cls, value: str) -> str:
+        if value and not is_year_month(value):
+            raise ValueError("start must be YYYY-MM")
+        return value
+
+    @field_validator("end")
+    @classmethod
+    def validate_end(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value and not is_year_month(value):
+            raise ValueError("end must be YYYY-MM or empty")
+        return value
 
 
 class CareerTarget(BaseModel):
@@ -108,6 +152,7 @@ class CandidateProfile(BaseModel):
     phone: str = ""
     location: str = ""
     links: List[str] = Field(default_factory=list)
+    skills: List[str] = Field(default_factory=list)
 
 
 class FactProposal(BaseModel):
@@ -127,6 +172,7 @@ class CareerFactBase(BaseModel):
     profile: CandidateProfile = Field(default_factory=CandidateProfile)
     target: CareerTarget = Field(default_factory=CareerTarget)
     experiences: List[Experience] = Field(default_factory=list)
+    educations: List[Education] = Field(default_factory=list)
     confirmed_proposal_ids: Set[UUID] = Field(default_factory=set)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -206,6 +252,21 @@ class InterviewSession(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
+class VersionSnippet(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    text: str
+    source_fact_ids: List[UUID] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utc_now)
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("snippet text must not be empty")
+        return stripped
+
+
 class ResumeVersion(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
@@ -223,6 +284,10 @@ class ResumeVersion(BaseModel):
     styles: Dict[str, str] = Field(default_factory=dict)
     manual_markdown: str = ""
     manual_html: str = ""
+    summary_options: List[str] = Field(default_factory=list)
+    selected_summary: str = ""
+    snippets: Dict[UUID, List[VersionSnippet]] = Field(default_factory=dict)
+    custom_sections: List[VersionSnippet] = Field(default_factory=list)
     base_revision: int = Field(ge=0)
     status: VersionStatus = VersionStatus.DRAFT
     is_active: bool = False

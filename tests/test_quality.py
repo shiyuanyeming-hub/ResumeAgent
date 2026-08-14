@@ -1,10 +1,16 @@
 from resume_agent.domain.models import (
+    CareerFactBase,
+    ConfidenceStatus,
+    Education,
     Experience,
     FactValue,
     QualityDimension,
     Specificity,
 )
-from resume_agent.domain.quality import evaluate_experience
+from resume_agent.domain.quality import (
+    evaluate_experience,
+    evaluate_profile_completeness,
+)
 
 
 def put(
@@ -57,3 +63,42 @@ def test_concrete_fact_scores_two():
     )
 
     assert evaluate_experience(experience).scores[QualityDimension.EVIDENCE] == 2
+
+
+def test_profile_completeness_zh_sections():
+    base = CareerFactBase()
+    report = evaluate_profile_completeness(base)
+    assert report.sections == {
+        "profile": False, "target": False, "education": False,
+        "experience": False, "skills": False, "summary": False,
+    }
+    assert report.complete is False
+
+
+def test_profile_completeness_reflects_filled_sections():
+    base = CareerFactBase()
+    base.profile.name = "王明"
+    base.profile.email = "wang@example.com"
+    base.profile.phone = "138-0000-0000"
+    base.target.role = "数据分析师"
+    base.educations.append(Education(school="某大学", major="统计学", start="2020-09"))
+    experience = base.add_experience("星河科技", "实习生")
+    experience.statements[QualityDimension.CONTEXT] = [
+        FactValue(text="业务需要留存分析", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.RESPONSIBILITY] = [
+        FactValue(text="负责看板搭建", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.ACTION] = [
+        FactValue(text="搭建看板", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    experience.statements[QualityDimension.RESULT] = [
+        FactValue(text="看板被团队采用", confidence=ConfidenceStatus.CONFIRMED)
+    ]
+    base.profile.skills = ["SQL"]
+    report = evaluate_profile_completeness(base, selected_summary="稳重可靠。")
+    assert report.sections == {
+        "profile": True, "target": True, "education": True,
+        "experience": True, "skills": True, "summary": True,
+    }
+    assert report.complete is True

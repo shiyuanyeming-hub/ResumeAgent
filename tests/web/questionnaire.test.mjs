@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   answerPayload,
+  defaultZhVersionName,
   normalizeChips,
   periodExtra,
   sectionFromStep,
@@ -42,4 +43,10 @@ test("sectionFromStep parses the leading section", () => {
 
 test("normalizeChips dedupes and trims", () => {
   assert.deepEqual(normalizeChips(["SQL", " SQL ", "SQL", ""]), ["SQL"]);
+});
+
+
+test("defaultZhVersionName formats the zh version name", () => {
+  assert.equal(defaultZhVersionName("数据分析师"), "中文简历 · 数据分析师");
+  assert.equal(defaultZhVersionName(""), "中文简历 · 通用岗位");
 });

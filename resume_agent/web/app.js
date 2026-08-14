@@ -14,6 +14,7 @@ import {
 } from "/assets/workbench-state.js";
 import {
   answerPayload,
+  defaultZhVersionName,
   normalizeChips,
   periodExtra,
 } from "/assets/questionnaire.js";
@@ -460,6 +461,18 @@ async function handleOnboarding(event) {
       languages: ["zh", "ja", "en"],
     });
     await activateBase(base);
+    if (currentBase?.id === base.id && versions.length === 0) {
+      const version = await api.createVersion(base.id, {
+        name: defaultZhVersionName(role),
+        target_role: role,
+        company: "",
+        raw_jd: "",
+        locale: "zh",
+        selected_experience_ids: [],
+      });
+      versions = [...versions.filter((item) => item.id !== version.id), version];
+      await chooseVersion(version.id);
+    }
   } catch (error) {
     showToast(error instanceof ApiError ? error.message : "档案创建失败");
     submit.disabled = false;
@@ -825,6 +838,7 @@ async function answerQuestionCard(card, result) {
     await api.answerQuestion(baseId, answerPayload(card.step_id, result));
     if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
     await refreshQuestionnaire();
+    await renderDocument();
     renderConversation();
   } catch (error) {
     if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;

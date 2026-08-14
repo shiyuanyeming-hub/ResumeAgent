@@ -23,3 +23,7 @@ export function normalizeChips(values) {
   }
   return result;
 }
+
+export function defaultZhVersionName(role) {
+  return `中文简历 · ${role || "通用岗位"}`;
+}

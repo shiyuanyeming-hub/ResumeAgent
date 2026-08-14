@@ -51,12 +51,14 @@ class InterviewService:
         audit_agent: FactAuditAgent,
         question_writer: QuestionWriterAgent,
         planner: Optional[QuestionPlanner] = None,
+        guide=None,
     ) -> None:
         self.fact_bases = fact_bases
         self.sessions = sessions
         self.audit_agent = audit_agent
         self.question_writer = question_writer
         self.planner = planner or QuestionPlanner()
+        self.guide = guide
 
     def create_session(
         self,
@@ -264,9 +266,17 @@ class InterviewService:
                 raise ValueError("question writer returned an empty question")
         session.pending_next_text = ""
         session.pending_next_dimension = None
+        options: List[str] = []
+        if self.guide is not None:
+            options = self.guide.followup_options(
+                base.target.role,
+                f"{experience.organization} · {experience.role}",
+                plan.dimension.value,
+            )
         return MentorQuestion(
             dimension=plan.dimension,
             text=text,
             priority=plan.priority,
             escalation=plan.escalation,
+            options=options,
         )

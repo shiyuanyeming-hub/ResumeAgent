@@ -81,3 +81,68 @@ class StructuredSnippetAgent:
         )
         payload = run_structured(self.runner, prompt, SnippetPayload)
         return [item.strip() for item in payload.snippets if item.strip()]
+
+
+class JobAnalysisPayload(BaseModel):
+    analysis: List[str] = Field(min_length=1, max_length=5)
+
+
+JOB_ANALYSIS_PROMPT = """你是资深求职导师。给定目标岗位，用中文输出 3~5 条该岗位最看重的经历与能力要点，每条一句话（不超过 30 字），用于引导用户准备简历。只输出 JSON：{"analysis": ["要点1", "要点2", ...]}"""
+
+
+class ExperienceOptionPayload(BaseModel):
+    label: str
+    type: str
+
+
+class ExperienceOptionsPayload(BaseModel):
+    options: List[ExperienceOptionPayload] = Field(min_length=1, max_length=6)
+
+
+EXPERIENCE_OPTIONS_PROMPT = """你是简历导师。给定目标岗位，生成 4~6 个候选「经历/项目类型」选项（中文短标签，如「产品实习」「用户调研项目」「数据分析项目」「校园活动」），帮助用户选出自己做过的事情。每个选项标注 type，只能取：internship（实习）、work（工作）、project（项目）、campus（校园）。只输出 JSON：{"options": [{"label": "...", "type": "internship"}, ...]}"""
+
+
+class FollowUpOptionsPayload(BaseModel):
+    options: List[str] = Field(min_length=1, max_length=6)
+
+
+FOLLOWUP_OPTIONS_PROMPT = """你是简历导师。给定目标岗位、当前经历与正在追问的维度，生成 3~5 个具体的中文选项（短短语），供用户快速回答该维度问题；选项要贴合这段经历的上下文，不要空泛。只输出 JSON：{"options": ["选项1", ...]}"""
+
+
+class StructuredJobAnalysisAgent:
+    def __init__(self, runner) -> None:
+        self.runner = runner
+
+    def analyze(self, target_role: str) -> List[str]:
+        prompt = f"{JOB_ANALYSIS_PROMPT}\n目标岗位：{target_role}"
+        payload = run_structured(self.runner, prompt, JobAnalysisPayload)
+        return [item.strip() for item in payload.analysis if item.strip()]
+
+
+class StructuredExperienceOptionsAgent:
+    def __init__(self, runner) -> None:
+        self.runner = runner
+
+    def options(self, target_role: str) -> List[dict]:
+        prompt = f"{EXPERIENCE_OPTIONS_PROMPT}\n目标岗位：{target_role}"
+        payload = run_structured(self.runner, prompt, ExperienceOptionsPayload)
+        return [
+            {"label": item.label.strip(), "type": item.type}
+            for item in payload.options
+            if item.label.strip() and item.type in ("internship", "work", "project", "campus")
+        ]
+
+
+class StructuredFollowUpOptionsAgent:
+    def __init__(self, runner) -> None:
+        self.runner = runner
+
+    def options(self, target_role: str, experience_text: str, dimension: str) -> List[str]:
+        prompt = (
+            f"{FOLLOWUP_OPTIONS_PROMPT}\n"
+            f"目标岗位：{target_role}\n"
+            f"当前经历：{experience_text}\n"
+            f"追问维度：{dimension}"
+        )
+        payload = run_structured(self.runner, prompt, FollowUpOptionsPayload)
+        return [item.strip() for item in payload.options if item.strip()]

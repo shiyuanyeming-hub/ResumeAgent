@@ -37,6 +37,7 @@ from resume_agent.api.schemas import (
     VersionStyleRequest,
 )
 from resume_agent.application.fact_base_service import FactBaseService
+from resume_agent.application.mentor_guide import MentorGuideService
 from resume_agent.application.interview_service import (
     InterviewService,
     InterviewTurn,
@@ -109,6 +110,9 @@ def create_app(
     agent_capabilities: Optional[AgentCapabilityStatus] = None,
     summary_agent=None,
     snippet_agent=None,
+    job_advisor=None,
+    experience_advisor=None,
+    followup_advisor=None,
 ) -> FastAPI:
     store = SQLiteStore(Path(database_path))
     fact_base_repository = SQLiteFactBaseRepository(store)
@@ -132,6 +136,11 @@ def create_app(
             "LLM runtime is not configured for this application instance"
         )
     fact_base_service = FactBaseService(fact_base_repository)
+    mentor_guide = MentorGuideService(
+        job_advisor=job_advisor,
+        experience_advisor=experience_advisor,
+        followup_advisor=followup_advisor,
+    )
     questionnaire_service = QuestionnaireService(
         fact_base_service,
         SQLiteQuestionnaireRepository(store),
@@ -144,6 +153,7 @@ def create_app(
         ),
         course_advisor=course_advisor,
         skill_advisor=skill_advisor,
+        guide=mentor_guide,
     )
     container = ServiceContainer(
         store=store,
@@ -157,6 +167,7 @@ def create_app(
             session_repository,
             fact_audit_agent or UnavailableFactAuditAgent(),
             question_writer or DeterministicQuestionWriter(),
+            guide=mentor_guide,
         ),
         versions=VersionService(version_repository),
         rendering=ResumeRenderService(
@@ -188,9 +199,13 @@ def create_app(
     @app.get("/fact-bases/{fact_base_id}/questionnaire")
     def questionnaire_view(fact_base_id: UUID):
         version = _current_version(fact_base_id)
+        container.questionnaires.next_card(fact_base_id, version)  # 触发候选惰性刷新
+        base = container.fact_bases.get(fact_base_id)
+        state = container.questionnaires._state(fact_base_id)
         return {
             "sections": container.questionnaires.progress(fact_base_id, version),
             "next": container.questionnaires.next_card(fact_base_id, version),
+            "job_analysis": state.job_analysis,
         }
 
     @app.post("/fact-bases/{fact_base_id}/questionnaire/answer")

@@ -231,6 +231,7 @@ class InterviewQuestion(BaseModel):
     text: str
     priority: float
     escalation: str
+    options: List[str] = Field(default_factory=list)
 
 
 class InterviewSession(BaseModel):
@@ -258,6 +259,10 @@ class QuestionnaireState(BaseModel):
     edited_experience_id: Optional[UUID] = None
     course_options: List[str] = Field(default_factory=list)
     skill_options: List[str] = Field(default_factory=list)
+    job_analysis: List[str] = Field(default_factory=list)
+    job_analysis_role: str = ""
+    experience_type_map: Dict[str, str] = Field(default_factory=dict)
+    experience_options_role: str = ""
     updated_at: datetime = Field(default_factory=utc_now)
 
 

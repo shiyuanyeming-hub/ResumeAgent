@@ -239,3 +239,30 @@ def test_reject_clears_pending_next_question():
     assert rejected.pending_next_dimension is None
     service.next_question(session.id)
     assert writer.calls == 1
+
+
+class OptionGuide:
+    def followup_options(self, role, text, dimension):
+        return ["选项A", "选项B"]
+
+
+def test_confirm_question_carries_followup_options():
+    base = CareerFactBase()
+    experience = base.add_experience("星河科技", "实习生")
+    session = InterviewSession(
+        fact_base_id=base.id, active_experience_id=experience.id
+    )
+    service = InterviewService(
+        InMemoryFactBaseRepository([base]),
+        InMemorySessionRepository([session]),
+        RecordingAudit(),
+        RecordingWriter(),
+        QuestionPlanner(),
+        guide=OptionGuide(),
+    )
+    service.answer(session.id, "我搭了看板")
+    stored = service.get_session(session.id)
+    proposal = list(stored.pending_proposals.values())[0]
+    turn = service.confirm(stored.id, proposal.id)
+    assert turn.question is not None
+    assert turn.question.options == ["选项A", "选项B"]

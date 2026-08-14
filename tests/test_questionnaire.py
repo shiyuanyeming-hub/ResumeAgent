@@ -311,3 +311,67 @@ def test_experience_period_present_saves_empty_end():
     reloaded = questionnaire.fact_bases.get(base.id)  # 重载即验证 payload 合法
     assert reloaded.experiences[0].end == ""
     assert reloaded.experiences[0].start == "2024-06"
+
+
+class FakeGuide:
+    def analyze_job(self, role):
+        return ["岗位要点一", "岗位要点二"]
+
+    def experience_options(self, role):
+        return [
+            {"label": "产品实习", "type": "internship"},
+            {"label": "用户调研项目", "type": "project"},
+        ]
+
+    def followup_options(self, role, text, dimension):
+        return []
+
+
+def test_guide_generates_job_analysis_and_experience_options():
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(), QuestionnaireEngine(),
+        guide=FakeGuide(),
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="产品经理")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "experience:add"
+    assert card.options == ["产品实习", "用户调研项目"]
+    state = questionnaire._state(base.id)
+    assert state.job_analysis == ["岗位要点一", "岗位要点二"]
+    assert state.experience_type_map == {
+        "产品实习": "internship", "用户调研项目": "project",
+    }
+
+
+def test_guide_option_creates_typed_experience():
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(), QuestionnaireEngine(),
+        guide=FakeGuide(),
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="产品经理")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    questionnaire.answer(base.id, "experience:add", value="产品实习")
+    loaded = questionnaire.fact_bases.get(base.id)
+    assert loaded.experiences[0].type is ExperienceType.INTERNSHIP
+    # 自填：不在映射里 → 默认项目类型，且文本预填为组织名
+    questionnaire.answer(base.id, "experience:more", value="自己组织的读书会")
+    loaded = questionnaire.fact_bases.get(base.id)
+    assert loaded.experiences[1].type is ExperienceType.PROJECT
+    assert loaded.experiences[1].organization == "自己组织的读书会"

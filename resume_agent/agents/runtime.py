@@ -18,10 +18,16 @@ from resume_agent.agents.mentor import (
 from resume_agent.agents.prompts import FACT_AUDIT_PROMPT, QUESTION_WRITER_PROMPT
 from resume_agent.agents.specialists import (
     COURSE_RECOMMEND_PROMPT,
+    EXPERIENCE_OPTIONS_PROMPT,
+    FOLLOWUP_OPTIONS_PROMPT,
+    JOB_ANALYSIS_PROMPT,
     SKILL_EXTRACT_PROMPT,
     SNIPPET_WRITE_PROMPT,
     SUMMARY_OPTIONS_PROMPT,
     StructuredCourseAgent,
+    StructuredExperienceOptionsAgent,
+    StructuredFollowUpOptionsAgent,
+    StructuredJobAnalysisAgent,
     StructuredSkillAgent,
     StructuredSnippetAgent,
     StructuredSummaryAgent,
@@ -151,6 +157,9 @@ class MentorRuntime:
     skill_advisor: Optional[StructuredSkillAgent] = None
     summary_writer: Optional[StructuredSummaryAgent] = None
     snippet_writer: Optional[StructuredSnippetAgent] = None
+    job_advisor: Optional[StructuredJobAnalysisAgent] = None
+    experience_advisor: Optional[StructuredExperienceOptionsAgent] = None
+    followup_advisor: Optional[StructuredFollowUpOptionsAgent] = None
 
 
 class FreshAgentRunner:
@@ -279,6 +288,30 @@ def build_mentor_runtime(
             config=_private_agent_config(framework),
         )
     )
+    job_runner = FreshAgentRunner(
+        lambda: framework.SimpleAgent(
+            name="岗位分析",
+            llm=llm,
+            system_prompt=JOB_ANALYSIS_PROMPT,
+            config=_private_agent_config(framework),
+        )
+    )
+    experience_options_runner = FreshAgentRunner(
+        lambda: framework.SimpleAgent(
+            name="经历类型选项",
+            llm=llm,
+            system_prompt=EXPERIENCE_OPTIONS_PROMPT,
+            config=_private_agent_config(framework),
+        )
+    )
+    followup_runner = FreshAgentRunner(
+        lambda: framework.SimpleAgent(
+            name="追问选项",
+            llm=llm,
+            system_prompt=FOLLOWUP_OPTIONS_PROMPT,
+            config=_private_agent_config(framework),
+        )
+    )
     return MentorRuntime(
         fact_auditor=StructuredFactAuditAgent(audit_runner),
         question_writer=StructuredQuestionWriterAgent(question_runner),
@@ -286,5 +319,8 @@ def build_mentor_runtime(
         skill_advisor=StructuredSkillAgent(skill_runner),
         summary_writer=StructuredSummaryAgent(summary_runner),
         snippet_writer=StructuredSnippetAgent(snippet_runner),
+        job_advisor=StructuredJobAnalysisAgent(job_runner),
+        experience_advisor=StructuredExperienceOptionsAgent(experience_options_runner),
+        followup_advisor=StructuredFollowUpOptionsAgent(followup_runner),
         capabilities=AgentCapabilityStatus.ready(settings.model),
     )

@@ -180,13 +180,15 @@ class QuestionnaireEngine:
         )
 
     def _experience_card(self, base, state):
+        default_labels = [label for _, label in EXPERIENCE_TYPE_OPTIONS]
+        type_options = list(state.experience_type_map.keys()) or default_labels
         if not base.experiences:
             if self._skipped(state, "experience:add"):
                 return None
             return self._card(
-                "experience:add", "experience", QuestionKind.CHOICE,
-                "先添加一段经历，你想写哪类？",
-                options=[label for _, label in EXPERIENCE_TYPE_OPTIONS],
+                "experience:add", "experience", QuestionKind.CHOICE_FREE,
+                "你做过以下哪些事情？（选一个，也可以自己补充）",
+                options=type_options,
             )
         for experience in base.experiences:
             card = self._experience_field_card(base, state, experience)
@@ -195,9 +197,9 @@ class QuestionnaireEngine:
         if "experience" in state.completed_sections:
             return None
         return self._card(
-            "experience:more", "experience", QuestionKind.CHOICE,
+            "experience:more", "experience", QuestionKind.CHOICE_FREE,
             "是否还有下一段经历？",
-            options=[label for _, label in EXPERIENCE_TYPE_OPTIONS] + [EXPERIENCE_DONE_OPTION],
+            options=type_options + [EXPERIENCE_DONE_OPTION],
         )
 
     def _experience_field_card(self, base, state, experience):
@@ -267,12 +269,14 @@ class QuestionnaireService:
         engine,
         course_advisor=None,
         skill_advisor=None,
+        guide=None,
     ):
         self.fact_bases = fact_bases
         self.repository = repository
         self.engine = engine
         self.course_advisor = course_advisor
         self.skill_advisor = skill_advisor
+        self.guide = guide
 
     def _state(self, fact_base_id):
         try:
@@ -282,6 +286,34 @@ class QuestionnaireService:
             self.repository.save(state)
             return state
 
+    def _refresh_mentor_candidates(self, base, state):
+        """按目标岗位惰性刷新岗位分析与经历类型选项（LLM 失败走离线模板）。"""
+        changed = False
+        role = base.target.role.strip()
+        if self.guide is not None:
+            if role and state.job_analysis_role != role:
+                state.job_analysis = self.guide.analyze_job(role)
+                state.job_analysis_role = role
+                changed = True
+            if state.experience_options_role != role:
+                options = self.guide.experience_options(role)
+                state.experience_type_map = {
+                    item["label"]: item["type"] for item in options
+                }
+                state.experience_options_role = role
+                changed = True
+        elif not state.experience_type_map:
+            from resume_agent.application.mentor_guide import offline_experience_options
+            state.experience_type_map = {
+                item["label"]: item["type"]
+                for item in offline_experience_options()
+            }
+            state.experience_options_role = role
+            changed = True
+        if changed:
+            state.updated_at = utc_now()
+            self.repository.save(state)
+
     def next_card(self, fact_base_id, version=None):
         base = self.fact_bases.get(fact_base_id)
         state = self._state(fact_base_id)
@@ -289,6 +321,7 @@ class QuestionnaireService:
             state.skill_options = self._skill_options(base)
             state.updated_at = utc_now()
             self.repository.save(state)
+        self._refresh_mentor_candidates(base, state)
         return self.engine.next_card(base, state, version=version)
 
     def progress(self, fact_base_id, version=None):
@@ -453,11 +486,13 @@ class QuestionnaireService:
             if "experience" not in state.completed_sections:
                 state.completed_sections.append("experience")
             return base
-        kind = {label: code for code, label in EXPERIENCE_TYPE_OPTIONS}.get(value)
+        kind = state.experience_type_map.get(value)
         if kind is None:
-            raise ValueError("经历类型不正确")
+            kind = "project"  # 用户自填的经历类型：默认按项目创建
         experience = Experience(
-            organization="", role="", type=ExperienceType(kind)
+            organization=value if value not in state.experience_type_map else "",
+            role="",
+            type=ExperienceType(kind),
         )
         base.experiences.append(experience)
         state.edited_experience_id = experience.id

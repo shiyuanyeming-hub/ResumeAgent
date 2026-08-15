@@ -560,6 +560,11 @@ async function startMentorSession(event) {
         pendingTemplateFile = null;
       }
     }
+    const dialog = byId("question-dialog");
+    byId("question-dialog-body").replaceChildren(
+      element("p", "question-prompt", "导师正在为你准备问题…"),
+    );
+    if (!dialog.open) dialog.showModal();
     await activateBase(base);
     if (currentBase?.id === base.id && versions.length === 0) {
       const version = await api.createVersion(base.id, {
@@ -733,7 +738,7 @@ function showCompletionCard(force = false) {
   const done = element("article", "question-card complete-card");
   done.append(element(
     "p", "question-prompt",
-    "🎉 各章节已收集完毕，可在右侧预览微调并导出 PDF 等格式。",
+    "🎉 向导已完成！你确认过的内容都已写入简历，可在右侧预览微调并导出 PDF 等格式。",
   ));
   const actions = element("div", "question-actions");
   const close = element("button", "primary", "关闭，去右侧微调");
@@ -765,9 +770,13 @@ function presentQuestionCard(card) {
     showCompletionCard();
     return;
   }
-  const unfinished = progress.filter((item) => item.section !== "summary" && !item.done);
   const summary = progress.find((item) => item.section === "summary");
-  if (summary && !summary.done && currentVersion && unfinished.length === 0) {
+  // 向导已问完且自我评价已勾选 → 完成卡（经历未达写作门槛也算完成流程）
+  if (!questionnaireState?.next && summary?.done) {
+    showCompletionCard();
+    return;
+  }
+  if (summary && !summary.done && currentVersion) {
     body.replaceChildren(summaryGenerateCard());
     if (!dialog.open) dialog.showModal();
     return;
@@ -1065,9 +1074,25 @@ function renderQuestionCard(card) {
   if (card.deletable) {
     const remove = element("button", "text-button danger-text", "选错了，删除这段经历");
     remove.type = "button";
-    remove.addEventListener("click", () => {
+    remove.addEventListener("click", async () => {
       const experienceId = String(card.step_id || "").split(":")[1];
-      confirmDeleteExperience(experienceId, true);
+      if (!currentBase || !experienceId || remove.disabled) return;
+      remove.disabled = true;
+      remove.textContent = "正在删除…";
+      try {
+        // 误选的经历还没有任何内容，直接删除即可，无需二次确认
+        const base = await api.deleteExperience(currentBase.id, experienceId);
+        replaceBase(base);
+        await refreshQuestionnaire();
+        renderConversation();
+        await renderFactBase();
+        showToast("已删除这段误选的经历");
+        presentQuestionCard(questionnaireState?.next || null);
+      } catch (error) {
+        showToast(error instanceof ApiError ? error.message : "删除失败");
+        remove.disabled = false;
+        remove.textContent = "选错了，删除这段经历";
+      }
     });
     actions.append(remove);
   }
@@ -1081,7 +1106,12 @@ function renderQuestionCard(card) {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const result = readValue ? readValue() : {};
+    if (card.kind === "multi_choice" && !(result.values || []).length) {
+      showToast("请至少勾选一项，或点「跳过」");
+      return;
+    }
     submit.disabled = true;
+    submit.textContent = "正在保存…";
     answerQuestionCard(card, result);
   });
   article.append(form);
@@ -1897,7 +1927,7 @@ function showAddExperienceForm() {
   if (!dialog.open) dialog.showModal();
 }
 
-function confirmDeleteExperience(experienceId, reopenWizard = false) {
+function confirmDeleteExperience(experienceId) {
   if (!currentBase || !experienceId) return;
   const experience = currentBase.experiences.find((item) => item.id === experienceId);
   if (!experience) return;
@@ -1931,9 +1961,6 @@ function confirmDeleteExperience(experienceId, reopenWizard = false) {
       renderJdTab();
       dialog.close();
       showToast("已删除这段经历");
-      if (reopenWizard) {
-        presentQuestionCard(questionnaireState?.next || null);
-      }
     } catch (error) {
       showToast(error instanceof ApiError ? error.message : "删除失败");
       confirm.disabled = false;

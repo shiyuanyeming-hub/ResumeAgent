@@ -1,0 +1,11 @@
+services:
+  resumeagent:
+    build: .
+    restart: always
+    env_file: .env
+    environment:
+      RESUME_AGENT_DB: /app/data/resume_agent.db
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"

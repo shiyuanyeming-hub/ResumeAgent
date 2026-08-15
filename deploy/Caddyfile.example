@@ -1,0 +1,14 @@
+# 可选：域名 + 自动 HTTPS（Let's Encrypt）
+
+# 没有域名可删掉本文件，直接用 http://服务器IP:8000。
+# 把 DOMAIN 换成你的域名，并把域名 A 记录解析到服务器公网 IP；
+# 在 docker-compose.yml 里加入下面的 caddy 服务后执行 ./deploy/deploy.sh。
+
+{
+    # 自动 HTTPS；邮件留空即可
+    email admin@example.com
+}
+
+$DOMAIN {
+    reverse_proxy resumeagent:8000
+}

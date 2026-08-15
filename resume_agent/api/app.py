@@ -1,5 +1,6 @@
 """FastAPI application factory for ResumeAgent."""
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -7,7 +8,7 @@ from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from resume_agent.agents.mentor import DeterministicQuestionWriter
@@ -129,7 +130,12 @@ def create_app(
     job_advisor=None,
     experience_advisor=None,
     followup_advisor=None,
+    access_code: Optional[str] = None,
 ) -> FastAPI:
+    # 可选访问口令：设置了 ACCESS_CODE 后，所有页面需要输入口令（打开即用 = 不设置）
+    access_code = (
+        os.environ.get("ACCESS_CODE", "") if access_code is None else access_code
+    ).strip()
     store = SQLiteStore(Path(database_path))
     fact_base_repository = SQLiteFactBaseRepository(store)
     session_repository = SQLiteSessionRepository(store)
@@ -209,6 +215,62 @@ def create_app(
         description="Evidence-driven multi-agent resume mentoring service",
     )
     app.state.container = container
+
+    # ── 可选访问口令（公网部署用；未设置 ACCESS_CODE 时完全打开即用）──
+    ACCESS_COOKIE = "resumeagent_access"
+    LOGIN_PAGE = """<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ResumeAgent · 访问口令</title>
+<style>
+body{{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#f4f6f9;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}}
+.card{{background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(15,23,42,.12);padding:34px 30px;width:min(92vw,360px);text-align:center;}}
+h1{{font-size:18px;color:#1f4e79;margin:0 0 8px;}}
+p{{color:#64748b;font-size:13px;margin:0 0 18px;}}
+input{{width:100%;padding:10px 12px;border:1px solid #d8dde5;border-radius:8px;font-size:14px;box-sizing:border-box;}}
+button{{width:100%;margin-top:12px;padding:10px;border:0;border-radius:8px;background:#1f4e79;color:#fff;font-size:14px;cursor:pointer;}}
+.wrong{{color:#b91c1c;font-size:12px;margin-top:10px;}}
+</style></head>
+<body><div class="card">
+<h1>ResumeAgent</h1>
+<p>输入访问口令后即可使用</p>
+<form method="post" action="/login">
+<input type="password" name="code" placeholder="访问口令" autofocus>
+<button type="submit">进入</button>
+</form>
+<p class="wrong">{error}</p>
+</div></body></html>"""
+
+    @app.middleware("http")
+    async def access_gate(request: Request, call_next):
+        if not access_code:
+            return await call_next(request)
+        path = request.url.path
+        if path == "/login" or path == "/health":
+            return await call_next(request)
+        if (
+            request.cookies.get(ACCESS_COOKIE) == access_code
+            or request.query_params.get("code") == access_code
+        ):
+            return await call_next(request)
+        return HTMLResponse(LOGIN_PAGE.format(error=""), status_code=401)
+
+    @app.get("/login", include_in_schema=False)
+    def login_page() -> HTMLResponse:
+        return HTMLResponse(LOGIN_PAGE.format(error=""))
+
+    @app.post("/login", include_in_schema=False)
+    async def login(request: Request):
+        form = await request.form()
+        if str(form.get("code", "")) == access_code:
+            response = RedirectResponse("/", status_code=303)
+            response.set_cookie(
+                ACCESS_COOKIE, access_code, httponly=True, max_age=60 * 60 * 24 * 30
+            )
+            return response
+        return HTMLResponse(
+            LOGIN_PAGE.format(error="口令不正确，请重试"), status_code=401
+        )
+
 
     def _current_version(fact_base_id: UUID) -> Optional[ResumeVersion]:
         versions = container.version_repository.list(fact_base_id)

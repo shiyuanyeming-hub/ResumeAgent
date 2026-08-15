@@ -72,6 +72,10 @@ uvicorn resume_agent.api.main:app --reload
 
 打开 <http://127.0.0.1:8000/>；OpenAPI 文档位于 <http://127.0.0.1:8000/docs>。
 
+### 部署到云服务器（公网使用）
+
+公网部署（Docker + 可选访问口令 + 可选 HTTPS 域名）见 [deploy/README.md](deploy/README.md)；一键脚本为 `deploy/deploy.sh`。可选环境变量 `ACCESS_CODE` 用于给网页加访问口令（不设置则打开即用）。
+
 ### 让同一网络内的其他人使用
 
 ```bash

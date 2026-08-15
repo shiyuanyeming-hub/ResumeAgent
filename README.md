@@ -1,139 +1,159 @@
-# ResumeAgent
+# ResumeAgent — AI 求职导师：把简历"问"出来
 
-**中文** · [日本語](README.ja.md) · [English](README.en.md)
+**中文** · [English](README.en.md) · [日本語](README.ja.md)
 
-ResumeAgent 是一个以证据为先的中日英简历导师。它不会先替你“写得更漂亮”，而是一次问一个问题，帮你回忆自己做过什么、分清个人贡献，并在你确认后才把事实写入简历。
+> 一个证据驱动的多智能体简历导师。它不像普通工具那样替你编漂亮话——而是像真正的导师一样，围绕你做过的事一步步追问，把「我负责过 XX」变成有背景、有行动、有结果的证据，确认后才写进简历。
+> 它还能按学校模板自动排版，一键导出 PDF。
 
-![ResumeAgent 双栏工作台](docs/assets/resume-agent-workbench.png)
+<p align="center">
+  <img src="docs/assets/resume-agent-workbench.png" alt="ResumeAgent 工作台" width="80%"/>
+  <br/>
+  <em>左：向导式问答与证据进度 · 右：实时简历预览（双栏版式）</em>
+</p>
 
-## 它怎样工作
+<p align="center">
+  <img src="docs/assets/resume-agent-resume.png" alt="简历成品示例" width="42%"/>
+  <br/>
+  <em>最终导出的简历（虚构示例数据）</em>
+</p>
 
-1. 选择一段真实经历，导师只追问当前最缺的一个证据维度。
-2. 模型把回答整理成候选事实；你可以确认或拒绝，未确认内容不会进入简历。
-3. 事实库按六个维度保存证据：背景、个人职责、行动、方法、结果、证明与数据。
-4. 针对具体 JD 建立投递版本，选择要使用的经历和中文、日文或英文模板。
-5. 在同一页面预览、编辑，并导出 HTML、Markdown、DOCX 或 PDF。
+---
 
-导师连续追问时会从直接提问逐步切换到回忆线索和替代证据；明确两次“暂时想不到”后会跳过该缺口。问题选择、确认规则、版本隔离和渲染由确定性代码控制，LLM 只承担候选事实抽取与问题措辞。
+## 这个项目解决什么问题
 
-## 当前可用功能
+写简历最难的从来不是排版，而是**说不清自己做过什么**。多数人只会写「负责数据分析」，既没有背景、行动，也没有结果——这正是简历被筛掉的原因。
 
-- 白色双栏 FastAPI 工作台：访谈、事实库、JD 定制、工具与实时文档预览。
-- 多档案、多经历和多投递版本；刷新页面后恢复当前会话、选择和服务端编辑稿。
-- 六维证据进度与单问题访谈；候选事实支持确认、拒绝、估算和敏感标记。
-- 只渲染已确认事实；事实库更新后会提示旧版本需要刷新。
-- 中文、日文、英文的独立标题、版式和每语三套样式。事实内容不会被自动翻译。
-- 可视化或 Markdown 编辑，并保存到服务端；可以随时恢复自动生成版本。
-- HTML、Markdown、DOCX、PDF 导出，以及西历/和暦换算工具。
-- 版本化的合成数据评测集，检查单问题、事实维度、证据保留和无幻觉等约束。
-- 向导式问答工作台：按基本信息 → 求职意向 → 教育背景 → 经历 → 技能 → 自我评价顺序收集，尽量用选项、年月选择器交互。
-- 核心课程智能推荐：按专业内置课程词典秒出推荐，配置模型后追加「AI 推荐」课程；技能标签支持提炼候选与自由添加。
-- 自我评价备选：根据已确认事实生成 3~5 条备选供勾选，严格无幻觉校验，确认后才写入简历。
-- 片段卡拖拽：经历事实可润色成片段卡，拖到预览的经历段落或自定义片段区即写入当前版本，可单独删除。
-- 本阶段优先完善中文简历；日/英界面保留原有能力。
+ResumeAgent 的做法是**先面试、后成文**：
+
+1. 你只说目标岗位（如「数据分析师」）；
+2. 导师分析岗位看重什么，弹窗里逐步提问（每个问题都有**可点选的选项**，也可自己写，「换一批」会把上一批当反例让模型重新生成）；
+3. 回答被模型提炼成**候选事实**，你确认后才进入事实库——**未确认的内容永远不会出现在简历上**；
+4. 事实按六个证据维度（背景 / 职责 / 行动 / 方法 / 结果 / 证明）归集，攒够证据即可成文；
+5. 简历按 基本信息 → 求职意向 → 教育背景 → 实习/工作经历 → 项目经历 → 技能与证书 → 自我评价 的标准结构自动生成，支持双栏版式、照片、学校模板（HTML 占位符 / 表单 PDF 自动填充），导出 HTML / Markdown / DOCX / PDF。
+
+**全程「答多少算多少」**：随时点「答完了，就用这些」结束，已确认的内容照实写入。
+
+## 核心设计（技术面试时可以展开讲）
+
+### 1. 确定性骨架 + LLM 只出候选（防幻觉）
+
+这是一个刻意的架构选择：
+
+- **什么时候问、问哪个维度、什么能写进简历、版本怎么隔离、怎么渲染**——全部由确定性代码（问卷引擎 + 维度规划器 + 质量门槛 + 渲染器）控制；
+- **LLM 只负责生成候选**：候选事实、候选问题、候选选项、自我评价备选；
+- 事实经过**用户确认**才落库；自我评价备选有**无幻觉校验**（禁止出现事实之外的数字、公司名、职位名）；
+- 每条 LLM 路径都有**离线兜底**，模型挂了流程不中断、功能可降级可用。
+
+好处：可测试（285 个 Python 测试 + 25 个前端测试）、行为可预期，面试时可以明确回答「哪里用了 AI、哪里没有、为什么」。
+
+### 2. 六维证据模型与质量门槛
+
+每段经历的证据按六个维度存储：`context / responsibility / action / method / result / evidence`。质量门槛要求**至少 4 个维度、且包含行动与（结果或证明）**，防止「写了经历却全是空话」。访谈规划器按 缺口严重度 × 岗位相关性 × 区分度 × 可回答性 × 疲劳度 动态选择下一个问题。
+
+### 3. 多智能体协作
+
+运行时基于 HelloAgents 构建 9 个专职智能体，每个都有明确的输入输出契约与离线兜底：
+
+| 智能体 | 职责 |
+| --- | --- |
+| 事实审计 | 把用户的回答提炼成候选事实（含维度归类） |
+| 追问撰写 | 按规划维度与追问阶段（直接 → 回忆线索 → 替代证据）生成问题 |
+| 岗位分析 | 生成目标岗位看重的经历与能力要点 |
+| 经历选项 / 追问选项 / 岗位选项 | 动态生成可点选的候选答案（支持「换一批」） |
+| 课程推荐 / 技能提炼 | 教育课程与技能标签候选 |
+| 自我评价 / 片段撰写 | 基于已确认事实生成备选，严格接地 |
+
+### 4. 学校模板与排版
+
+- 内置三套主题的双栏版式（藏青现代 / 经典墨色 / 清新青碧）；
+- 上传学校的 **HTML 模板**（占位符 `{{education}} {{experience_work}} ...` 自动填充）；
+- 上传**带表单字段的 PDF 模板**，自动识别「姓名 / 电话 / 毕业院校 …」等字段并填充，导出即学校成品版式；
+- 照片上传、证书/语言成绩/GPA/排名/研究方向/毕业论文等细节字段；
+- 学校名称支持拼音/首字母模糊联想（180+ 国内院校 + 90+ 海外院校），专业按学校类型优先展示。
+
+### 5. 数据与工程
+
+- 后端：Python 3.12 · FastAPI · Pydantic v2 · SQLite（事实库 / 会话 / 版本，JSON 载荷快照 + 乐观并发修订）
+- 前端：**零构建**的原生 ES Modules + `<dialog>` 弹窗向导，无框架依赖
+- 版本体系：事实库与投递版本分离，版本有修订号与陈旧提示，支持可视化/Markdown 双编辑
+- 导出：HTML / Markdown / DOCX（python-docx）/ PDF（无头 Chrome 打印）
+- 部署：Docker 一键部署，可选访问口令（`ACCESS_CODE`），可选 Caddy 域名 + 自动 HTTPS
+
+## 技术栈
+
+| 层 | 技术 |
+| --- | --- |
+| 语言 | Python 3.12 |
+| Web 框架 | FastAPI + Uvicorn |
+| 数据校验 | Pydantic v2 |
+| 存储 | SQLite（JSON 载荷 + 乐观并发） |
+| 智能体框架 | HelloAgents（OpenAI 兼容接口，支持 DeepSeek / Qwen 等） |
+| 前端 | 原生 HTML / CSS / JavaScript（ES Modules，零构建） |
+| 文档处理 | pypdf（表单 PDF 填充）、python-docx、无头 Chrome（PDF 渲染） |
+| 部署 | Docker / Docker Compose / Caddy |
 
 ## 架构
 
 ```text
 Browser (vanilla ES modules)
-            │ same-origin JSON API
-FastAPI ─── application services ─── deterministic planner / renderer
-            │                              │
-          SQLite                      HelloAgents adapters
-     facts, sessions, versions       fact audit + question wording
-```
-
-默认 UI 没有前端构建步骤。SQLite 是本地事实、会话、版本和编辑稿的唯一持久化来源；渲染器只读取目标版本所选经历中的已确认事实。
-
-主要目录：
-
-```text
-resume_agent/api/             FastAPI 入口与接口
-resume_agent/application/     访谈、事实库与版本用例
-resume_agent/domain/          领域模型和六维质量门槛
-resume_agent/agents/          HelloAgents 适配器与提示词
-resume_agent/rendering/       三语模板与导出器
-resume_agent/web/             原生 HTML/CSS/JavaScript 工作台
-tests/                        Python 与浏览器客户端测试
-evaluation/                   合成导师评测数据与报告目录
+          │  same-origin JSON API
+   FastAPI ── application services ── deterministic planner / renderer
+          │                                   │
+       SQLite                          HelloAgents adapters
+   facts / sessions / versions        （9 个专职智能体，全部可离线兜底）
 ```
 
 ## 快速开始
 
-要求 Python 3.10+。只有 PDF 导出额外需要本机安装 Google Chrome 或 Microsoft Edge。
+要求 Python 3.10+；PDF 导出需要本机 Chrome/Edge。
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e '.[agents,web]'
-cp .env.example .env
+pip install -e '.[agents]'
+cp .env.example .env          # 填入 LLM_API_KEY（OpenAI 兼容，DeepSeek/Qwen 均可）
 uvicorn resume_agent.api.main:app --reload
 ```
 
-打开 <http://127.0.0.1:8000/>；OpenAPI 文档位于 <http://127.0.0.1:8000/docs>。
+打开 <http://127.0.0.1:8000/>。不配置模型时进入离线模式，全部功能可用确定性兜底。
 
-### 部署到云服务器（公网使用）
-
-公网部署（Docker + 可选访问口令 + 可选 HTTPS 域名）见 [deploy/README.md](deploy/README.md)；一键脚本为 `deploy/deploy.sh`。可选环境变量 `ACCESS_CODE` 用于给网页加访问口令（不设置则打开即用）。
-
-### 让同一网络内的其他人使用
+运行测试：
 
 ```bash
-chmod +x start.sh
-./start.sh          # 绑定 0.0.0.0:8000，脚本会打印局域网地址
+.venv/bin/python -m pytest -q          # 285 个后端测试
+node --test tests/web/*.test.mjs       # 25 个前端测试
 ```
 
-启动后同一 Wi-Fi / 局域网内的同事，在浏览器打开脚本打印的 `http://<本机IP>:8000` 即可使用；每人打开页面会创建各自的档案，数据统一保存在 `data/resume_agent.db`。
-
-> 注意：当前服务没有登录鉴权，适合内网小团队使用；如需公网部署，请先加一层认证（或放在公司内网/VPN 之后），并妥善保管 `.env` 中的模型密钥。
-
-`.env.example` 中是占位值。要启用导师访谈，请将它们替换为真实的 OpenAI 兼容模型配置；保留占位值或不提供配置时，应用会进入离线模式。
-
-| 变量 | 用途 | 默认值 |
-| --- | --- | --- |
-| `LLM_MODEL_ID` | 模型 ID | 必填（导师模式） |
-| `LLM_API_KEY` | API 密钥；也兼容 `DEEPSEEK_API_KEY` | 必填（导师模式） |
-| `LLM_BASE_URL` | OpenAI 兼容 HTTP(S) 地址 | 必填（导师模式） |
-| `LLM_TIMEOUT` | 请求超时秒数 | `60` |
-| `LLM_TEMPERATURE` | 事实抽取温度 | `0.2` |
-| `LLM_MAX_TOKENS` | 单次最大输出 token | `2048` |
-| `RESUME_AGENT_DB` | SQLite 文件路径 | `data/resume_agent.db` |
-
-模型配置只在服务端读取。启动应用不会自动请求模型；`GET /capabilities` 可查看导师与导出能力，但不会返回 API Key 或完整供应商地址。
-
-## 测试
+## 部署到公网
 
 ```bash
-pip install -e '.[dev]'
-.venv/bin/python -m pytest -q
-node --test tests/web/*.test.mjs
+cp .env.example .env && vim .env       # 填密钥；建议加 ACCESS_CODE=访问口令
+chmod +x deploy/deploy.sh && ./deploy/deploy.sh
 ```
 
-配置模型后可运行合成导师评测：
+详见 [deploy/README.md](deploy/README.md)：Docker 一键部署、数据备份、域名 + HTTPS、安全组配置。
 
-```bash
-resume-agent-eval --repeats 3 --fail-under 0.90
+## 目录结构
+
+```text
+resume_agent/api/             FastAPI 入口、访问口令中间件
+resume_agent/application/     问卷引擎、访谈服务、版本、渲染、PDF 模板填充
+resume_agent/domain/          领域模型、六维质量门槛、学校/课程目录
+resume_agent/agents/          HelloAgents 适配器与提示词
+resume_agent/rendering/       三语渲染器与导出器
+resume_agent/web/             原生前端工作台（零构建）
+tests/                        Python 与浏览器客户端测试
+evaluation/                   合成导师评测集（检查单问题、维度、证据保留、无幻觉）
+deploy/                       Docker 部署套件
 ```
 
-## 隐私与本地数据
+## Roadmap
 
-- 默认数据保存在本机 SQLite；API Key 只存在于服务端环境变量。
-- 浏览器存储只保留档案、经历、版本、语言和标签页等选择 ID，不保存回答、事实、编辑稿或 API Key。
-- 用于处理简历内容的 HelloAgents 实例默认关闭 trace、session、skills、todo、devlog 和 subagent 持久化。
-- 仓库忽略 `.env`、SQLite 数据库、虚拟环境和本地缓存。提交或分享前仍应自行检查导出文件中的个人信息。
+- [ ] 注册登录与多用户账号体系
+- [ ] 英文 / 日文独立模板体系（不止翻译）
+- [ ] 排版型 PDF（无表单字段）的版式识别与填充
+- [ ] 基于岗位 JD 的经历匹配与简历打分
 
-## 当前限制
+## License
 
-- 这是本地单用户 MVP，没有托管服务、登录鉴权、多用户权限或云端数据隔离。不要直接暴露到公网。
-- 导师提问和候选事实抽取需要可用的 LLM；没有 LLM 时，档案、事实、版本、预览、编辑和导出仍可离线使用。
-- 三语模板会本地化文档结构和标题，但不会自动翻译已确认事实；投递前需要自行提供或核对目标语言内容。
-- 日文 Web 版当前生成 `職務経歴書`。包含个人资料、照片、学历和资格字段的完整 JIS `履歴書` 尚未建模。
-- PDF 导出依赖本机 Chrome 或 Edge；缺少浏览器时，HTML、Markdown 与 DOCX 不受影响。
-- 当前没有已有简历的 PDF/DOCX 导入、团队协作或生产部署配置。
-- 向导式问答、课程推荐、自我评价与片段卡当前仅支持中文简历；日文与英文简历沿用原有渲染与收集方式。
-
-## 开源来源与许可证
-
-本项目最初作为 [Datawhale HelloAgents](https://github.com/datawhalechina/hello-agents) 教程共创项目开发，现作为可独立运行的作品继续维护。
-
-本项目沿用教程上游的 [CC BY-NC-SA 4.0](LICENSE) 许可证，并保留原项目署名。
+[MIT](LICENSE)

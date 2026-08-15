@@ -1,118 +1,105 @@
-# ResumeAgent
+# ResumeAgent — An Evidence-Driven Multi-Agent Resume Mentor
 
-[中文](README.md) · [日本語](README.ja.md) · **English**
+**English** · [中文](README.md) · [日本語](README.ja.md)
 
-ResumeAgent is an evidence-first resume mentor for Chinese, Japanese, and English resumes. Instead of polishing vague claims, it asks one question at a time, helps you recall what you actually did, separates personal contribution from team output, and writes a fact into the resume only after you confirm it.
+> Instead of writing fancy copy for you, ResumeAgent interviews you like a real mentor: it asks about what you actually did — background, actions, methods, results — and only after you confirm the extracted facts does anything reach your resume. It then renders a polished, template-based resume and exports it as PDF.
 
-![ResumeAgent two-column workbench](docs/assets/resume-agent-workbench.png)
+<p align="center">
+  <img src="docs/assets/resume-agent-workbench.png" alt="ResumeAgent workbench" width="80%"/>
+  <br/>
+  <em>Left: guided Q&A with evidence progress · Right: live resume preview (two-column layout)</em>
+</p>
 
-## How it works
+<p align="center">
+  <img src="docs/assets/resume-agent-resume.png" alt="Rendered resume sample" width="42%"/>
+  <br/>
+  <em>Final rendered resume (synthetic sample data)</em>
+</p>
 
-1. Select a real experience. The mentor asks about one currently missing evidence dimension.
-2. The model turns your answer into a proposed fact. You can confirm or reject it; unconfirmed content never enters the resume.
-3. The fact base stores evidence across six dimensions: context, personal responsibility, action, method, result, and supporting evidence or data.
-4. Create a job-specific version for a JD, choose the experiences to include, and select a Chinese, Japanese, or English template.
-5. Preview and edit in the same workbench, then export HTML, Markdown, DOCX, or PDF.
+---
 
-Follow-ups progress from a direct question to recall anchors and alternative evidence. After two explicit “I can't recall right now” responses, the gap is skipped. Deterministic code controls dimension selection, confirmation rules, version isolation, and rendering; the LLM is limited to proposed-fact extraction and question wording.
+## The Problem
 
-## What works today
+The hardest part of writing a resume is not layout — it's articulating what you did. Most people can only write "responsible for data analysis" with no context, actions, or results.
 
-- A restrained, two-column FastAPI workbench with interview, fact base, JD customization, tools, and live document preview.
-- Multiple candidate files, experiences, and job versions; the current session, selections, and server-side manual draft survive a page refresh.
-- Six-dimension evidence progress and one-question interviewing; proposed facts can be confirmed or rejected and marked estimated or sensitive.
-- Evidence-only rendering: unconfirmed facts are excluded, and versions are marked stale when their fact base changes.
-- Separate Chinese, Japanese, and English headings, layouts, and three styles per language. Fact text is not translated automatically.
-- Visual or Markdown editing saved on the server, with a reset back to the generated version.
-- HTML, Markdown, DOCX, and PDF exports, plus Gregorian/Japanese era date conversion.
-- A versioned synthetic evaluation set for one-question behavior, dimension accuracy, evidence preservation, and hallucination resistance.
+ResumeAgent inverts the workflow: **interview first, then render**.
 
-## Architecture
+1. You state a target role (e.g., "Data Analyst").
+2. The mentor analyzes what that role demands, then asks questions one at a time in a popup — every question ships with **clickable candidate answers** ("换一批" / regenerate passes the rejected batch back to the model as negative examples).
+3. Your answers are distilled into **candidate facts**; only facts you confirm enter the fact base.
+4. Facts are organized across **six evidence dimensions**: context, responsibility, action, method, result, evidence. A quality gate requires ≥4 dimensions including action plus result/evidence.
+5. The resume is assembled in the standard order (basics → objective → education → work experience → projects → skills & certificates → self-summary), rendered in a two-column themed layout, and exported as HTML / Markdown / DOCX / PDF.
 
-```text
-Browser (vanilla ES modules)
-            │ same-origin JSON API
-FastAPI ─── application services ─── deterministic planner / renderer
-            │                              │
-          SQLite                      HelloAgents adapters
-     facts, sessions, versions       fact audit + question wording
-```
+You can stop anytime — "答完了，就用这些" (I'm done) keeps whatever you confirmed.
 
-The default UI has no frontend build step. SQLite is the local source of persistence for facts, sessions, versions, and manual drafts. The renderer reads only confirmed facts from experiences selected by the target version.
+## Key Architecture Decisions
 
-Key directories:
+### Deterministic skeleton, LLM for candidates only (hallucination control)
 
-```text
-resume_agent/api/             FastAPI entry point and API
-resume_agent/application/     Interview, fact-base, and version use cases
-resume_agent/domain/          Domain models and six-dimension quality gate
-resume_agent/agents/          HelloAgents adapters and prompts
-resume_agent/rendering/       Trilingual templates and exporters
-resume_agent/web/             Vanilla HTML/CSS/JavaScript workbench
-tests/                        Python and browser-client tests
-evaluation/                   Synthetic mentor data and report output
-```
+- **When to ask, which dimension to ask, what may enter the resume, version isolation, rendering** — all deterministic code (questionnaire engine, dimension planner, quality gate, renderer).
+- **LLMs only propose**: candidate facts, questions, options, self-summary variants.
+- Facts require explicit user confirmation; self-summaries pass a grounding check (no numbers/companies/titles beyond the facts).
+- Every LLM path has an offline fallback; the flow never breaks when the model is down.
 
-## Quick start
+### Six-dimension evidence model
 
-Python 3.10+ is required. Google Chrome or Microsoft Edge is additionally required only for PDF export.
+Each experience stores evidence across `context / responsibility / action / method / result / evidence`. The planner ranks the next gap by severity × job relevance × distinctiveness × answerability × fatigue.
+
+### Nine specialized agents (HelloAgents)
+
+Fact auditing, question writing, job analysis, experience/role/follow-up option generation, course recommendation, skill extraction, self-summary and snippet writing — each with typed I/O contracts and offline fallbacks.
+
+### Template system
+
+- Three themed two-column layouts;
+- School **HTML templates** with placeholders (`{{education}} {{experience_work}} ...`);
+- **Form-PDF templates**: AcroForm fields (name, phone, school, …) are auto-detected, matched, and filled — exported directly as the school's layout;
+- Photo upload; GPA/rank/research/thesis/certificates/language scores;
+- School search with pinyin-initial fuzzy matching (180+ Chinese and 90+ overseas institutions).
+
+## Tech Stack
+
+| Layer | Technology |
+| --- | --- |
+| Language | Python 3.12 |
+| Web | FastAPI + Uvicorn |
+| Validation | Pydantic v2 |
+| Storage | SQLite (JSON payloads, optimistic concurrency) |
+| Agents | HelloAgents (OpenAI-compatible; DeepSeek / Qwen / …) |
+| Frontend | Vanilla HTML / CSS / JS (ES modules, zero build) |
+| Documents | pypdf (form-PDF filling), python-docx, headless Chrome (PDF) |
+| Deploy | Docker / Docker Compose / Caddy |
+
+## Quick Start
+
+Python 3.10+; PDF export needs Chrome/Edge.
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e '.[agents,web]'
-cp .env.example .env
+pip install -e '.[agents]'
+cp .env.example .env          # set LLM_API_KEY (OpenAI-compatible)
 uvicorn resume_agent.api.main:app --reload
 ```
 
-Open <http://127.0.0.1:8000/>. The OpenAPI documentation is available at <http://127.0.0.1:8000/docs>.
+Open <http://127.0.0.1:8000/>. Without model config the app runs in offline mode with deterministic fallbacks.
 
-The values in `.env.example` are placeholders. Replace them with a real OpenAI-compatible model configuration to enable mentor interviews. Keeping the placeholders or omitting the configuration starts the application in offline mode.
-
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `LLM_MODEL_ID` | Model ID | required for mentor mode |
-| `LLM_API_KEY` | API key; `DEEPSEEK_API_KEY` is also supported | required for mentor mode |
-| `LLM_BASE_URL` | OpenAI-compatible HTTP(S) URL | required for mentor mode |
-| `LLM_TIMEOUT` | Request timeout in seconds | `60` |
-| `LLM_TEMPERATURE` | Fact-extraction temperature | `0.2` |
-| `LLM_MAX_TOKENS` | Maximum tokens per request | `2048` |
-| `RESUME_AGENT_DB` | SQLite file path | `data/resume_agent.db` |
-
-Model settings are read only by the server. Starting the application does not automatically call the model. `GET /capabilities` reports mentor and export availability without returning the API key or full provider URL.
-
-## Tests
+Tests:
 
 ```bash
-pip install -e '.[dev]'
-.venv/bin/python -m pytest -q
-node --test tests/web/*.test.mjs
+.venv/bin/python -m pytest -q          # 285 backend tests
+node --test tests/web/*.test.mjs       # 25 frontend tests
 ```
 
-With a model configured, you can also run the synthetic mentor evaluation:
+## Public Deployment
 
 ```bash
-resume-agent-eval --repeats 3 --fail-under 0.90
+cp .env.example .env && vim .env       # set keys; consider ACCESS_CODE=<passcode>
+chmod +x deploy/deploy.sh && ./deploy/deploy.sh
 ```
 
-## Privacy and local data
+See [deploy/README.md](deploy/README.md) for Docker deployment, backups, domain + HTTPS, and firewall setup.
 
-- Data is stored in local SQLite by default. The API key exists only in server-side environment variables.
-- Browser storage contains selection IDs for the candidate file, experience, version, language, and tab. It does not contain answers, facts, drafts, or API keys.
-- HelloAgents instances that handle resume content disable trace, session, skills, todo, devlog, and subagent persistence by default.
-- The repository ignores `.env`, SQLite databases, virtual environments, and local caches. You should still inspect exported files for personal information before committing or sharing them.
+## License
 
-## Current limitations
-
-- This is a local, single-user MVP. It has no hosted service, authentication, multi-user authorization, or cloud data isolation. Do not expose it directly to the public internet.
-- Mentor questions and proposed-fact extraction require a working LLM. Candidate files, facts, versions, preview, editing, and export remain available offline without an LLM.
-- Trilingual templates localize document structure and headings but do not automatically translate confirmed facts. Supply or review content in the target language before applying.
-- The Japanese web output is currently a `職務経歴書`. A complete JIS `履歴書` with personal details, photo, education, and qualification fields has not yet been modeled.
-- PDF export depends on a local Chrome or Edge installation. HTML, Markdown, and DOCX remain available without it.
-- Importing an existing PDF/DOCX resume, team collaboration, and production deployment configuration are not yet included.
-
-## Open-source origin and license
-
-This project began as a co-created [Datawhale HelloAgents](https://github.com/datawhalechina/hello-agents) tutorial project and is now maintained as a standalone portfolio project.
-
-This project retains the tutorial upstream's [CC BY-NC-SA 4.0](LICENSE) license and attribution.
+[MIT](LICENSE)

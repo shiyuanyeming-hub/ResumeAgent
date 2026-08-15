@@ -1487,6 +1487,13 @@ async function renderFactBase(expectedGeneration = baseActivationGate.current())
     return;
   }
   const base = currentBase;
+  const toolbar = element("div", "facts-toolbar");
+  const addButton = element("button", "primary", "＋ 添加一段经历");
+  addButton.type = "button";
+  addButton.addEventListener("click", showAddExperienceForm);
+  toolbar.append(addButton);
+  root.append(toolbar);
+
   const profileDetails = element("details", "profile-details");
   profileDetails.open = false;
   profileDetails.append(element("summary", "", "候选人基本信息"), profileForm());
@@ -1502,7 +1509,13 @@ async function renderFactBase(expectedGeneration = baseActivationGate.current())
   if (!baseActivationGate.isCurrent(expectedGeneration) || currentBase?.id !== base.id) return;
   base.experiences.forEach((experience, index) => {
     const card = element("article", "experience-card");
-    card.append(element("h3", "", `${experience.organization} · ${experience.role}`));
+    const header = element("div", "experience-card-header");
+    header.append(element("h3", "", `${experience.organization} · ${experience.role}`));
+    const remove = element("button", "text-button danger-text", "删除此段");
+    remove.type = "button";
+    remove.addEventListener("click", () => confirmDeleteExperience(experience.id));
+    header.append(remove);
+    card.append(header);
     const quality = qualityReports[index];
     card.append(element(
       "p",
@@ -1537,12 +1550,12 @@ async function renderFactBase(expectedGeneration = baseActivationGate.current())
 
 function snippetCardSection(base, experience) {
   const section = element("div", "snippet-cards");
-  const heading = element("h4", "", "片段卡");
+  const heading = element("h4", "", "片段卡（自定义板块用）");
   const hint = element(
     "p", "quality-caption",
     editMode
       ? "退出编辑模式后可拖拽卡片到右侧预览。"
-      : "拖拽卡片到右侧预览的经历段落或底部自定义片段区。",
+      : "经历板块如实展示已确认事实；把润色后的片段拖到右侧底部「自定义片段」区，用于个人技能、性格等自由内容。",
   );
   const generate = element("button", "", "生成片段卡");
   generate.type = "button";
@@ -1595,9 +1608,48 @@ const wiredDropTargets = new WeakSet();
 function wirePreviewDropTargets() {
   const doc = byId("preview-frame").contentDocument;
   if (!doc) return;
-  for (const target of doc.querySelectorAll("[data-section]")) {
-    // 用内存 WeakSet 标记：不能写在 DOM 属性上，否则可视化编辑保存后
-    // 属性被存进编辑稿，重载后所有拖放目标都会被当成「已绑定」而跳过。
+
+  // 预览专用样式（按钮不进入导出的 HTML）
+  if (!doc.getElementById("preview-chrome-style")) {
+    const style = doc.createElement("style");
+    style.id = "preview-chrome-style";
+    style.textContent = [
+      "section.experience, li.snippet { position: relative; }",
+      ".chrome-remove { position: absolute; right: 0; top: 0; border: none;",
+      " background: transparent; color: #c3c9d1; cursor: pointer; font-size: 9pt;",
+      " padding: 0 2px; line-height: 1.4; }",
+      ".chrome-remove:hover { color: #b91c1c; }",
+      "li.snippet { padding-right: 18px; }",
+    ].join("\n");
+    doc.head.append(style);
+  }
+
+  // 经历段落：注入「删除整段」按钮
+  for (const section of doc.querySelectorAll("section.experience[data-experience-id]")) {
+    if (section.querySelector(".chrome-remove")) continue;
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "chrome-remove";
+    button.dataset.experienceId = section.dataset.experienceId;
+    button.title = "删除整段经历";
+    button.textContent = "✕";
+    section.append(button);
+  }
+
+  // 自定义片段条目：注入删除按钮
+  for (const item of doc.querySelectorAll('li.snippet[data-snippet-id]')) {
+    if (item.querySelector(".chrome-remove")) continue;
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "chrome-remove";
+    button.dataset.snippetId = item.dataset.snippetId;
+    button.title = "删除该自定义片段";
+    button.textContent = "✕";
+    item.append(button);
+  }
+
+  // 只有自定义片段区是拖放目标
+  for (const target of doc.querySelectorAll('[data-section="custom"]')) {
     if (wiredDropTargets.has(target)) continue;
     wiredDropTargets.add(target);
     target.addEventListener("dragover", (event) => {
@@ -1613,12 +1665,122 @@ function wirePreviewDropTargets() {
       if (raw) dropSnippet(target, raw);
     });
   }
+
   // 每个 load 事件都会创建新文档，直接绑定一次即可
   doc.addEventListener("click", (event) => {
-    const button = event.target.closest(".snippet-remove");
-    if (!button) return;
-    removeVersionSnippet(button.dataset.snippetId);
+    const remove = event.target.closest(".chrome-remove");
+    if (!remove) return;
+    if (remove.dataset.snippetId) removeVersionSnippet(remove.dataset.snippetId);
+    else if (remove.dataset.experienceId) confirmDeleteExperience(remove.dataset.experienceId);
   });
+}
+
+function showAddExperienceForm() {
+  if (!currentBase) return;
+  const dialog = byId("question-dialog");
+  const body = byId("question-dialog-body");
+  const article = element("article", "question-card");
+  article.append(
+    element("p", "question-prompt", "添加一段经历（公司、岗位、时间会如实展示在简历上）"),
+  );
+  const form = element("form", "question-card-form");
+  const orgInput = document.createElement("input");
+  orgInput.placeholder = "公司 / 组织名称";
+  const roleInput = document.createElement("input");
+  roleInput.placeholder = "你的岗位";
+  const startField = yearMonthField("");
+  const startRow = element("div", "chip-free-row");
+  startRow.append(element("span", "", "开始时间"), startField);
+  form.append(orgInput, roleInput, startRow);
+  const actions = element("div", "question-actions");
+  const cancel = element("button", "", "取消");
+  cancel.type = "button";
+  cancel.addEventListener("click", () => dialog.close());
+  const submit = element("button", "primary", "添加");
+  submit.type = "submit";
+  actions.append(cancel, submit);
+  form.append(actions);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const organization = orgInput.value.trim();
+    const role = roleInput.value.trim();
+    if (!organization || !role) {
+      showToast("请填写公司与岗位");
+      return;
+    }
+    submit.disabled = true;
+    submit.textContent = "正在添加…";
+    try {
+      const base = await api.addExperience(currentBase.id, { organization, role });
+      replaceBase(base);
+      const newExperienceId = base.experiences.at(-1)?.id;
+      if (newExperienceId && currentVersion) {
+        const updated = await api.includeExperience(currentVersion.id, newExperienceId);
+        versions = versions.map((item) => item.id === updated.id ? updated : item);
+        currentVersion = updated;
+      }
+      await refreshQuestionnaire();
+      await renderDocument();
+      renderConversation();
+      await renderFactBase();
+      dialog.close();
+      showToast("经历已添加，继续补充起止时间与内容");
+      presentQuestionCard(questionnaireState?.next || null);
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "添加经历失败");
+      submit.disabled = false;
+      submit.textContent = "添加";
+    }
+  });
+  article.append(form);
+  body.replaceChildren(article);
+  if (!dialog.open) dialog.showModal();
+}
+
+function confirmDeleteExperience(experienceId) {
+  if (!currentBase || !experienceId) return;
+  const experience = currentBase.experiences.find((item) => item.id === experienceId);
+  if (!experience) return;
+  const dialog = byId("question-dialog");
+  const body = byId("question-dialog-body");
+  const article = element("article", "question-card");
+  article.append(element(
+    "p", "question-prompt",
+    `删除整段经历「${experience.organization} · ${experience.role}」？删除后不可恢复。`,
+  ));
+  const actions = element("div", "question-actions");
+  const confirm = element("button", "danger", "删除这段经历");
+  const cancel = element("button", "", "取消");
+  confirm.type = cancel.type = "button";
+  confirm.addEventListener("click", async () => {
+    confirm.disabled = true;
+    confirm.textContent = "正在删除…";
+    try {
+      const base = await api.deleteExperience(currentBase.id, experienceId);
+      replaceBase(base);
+      currentExperienceQuality = null;
+      if (state.experienceId === experienceId) {
+        state.experienceId = base.experiences.at(-1)?.id || "";
+        saveState();
+      }
+      await refreshQuestionnaire();
+      await renderDocument();
+      renderConversation();
+      await renderFactBase();
+      renderJdTab();
+      dialog.close();
+      showToast("已删除这段经历");
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "删除失败");
+      confirm.disabled = false;
+      confirm.textContent = "删除这段经历";
+    }
+  });
+  cancel.addEventListener("click", () => dialog.close());
+  actions.append(cancel, confirm);
+  article.append(actions);
+  body.replaceChildren(article);
+  if (!dialog.open) dialog.showModal();
 }
 
 async function dropSnippet(target, raw) {
@@ -1632,27 +1794,22 @@ async function dropSnippet(target, raw) {
     showToast("当前无法拖入片段");
     return;
   }
-  const experienceId = target.dataset.section === "custom"
-    ? null
-    : target.dataset.section.split(":")[1];
-  const renderedTexts = (currentRendered?.experiences || [])
-    .flatMap((item) => item.bullets || []);
   const customTexts = (currentRendered?.custom_snippets || [])
     .map((item) => item.text);
-  if (renderedTexts.includes(payload.text) || customTexts.includes(payload.text)) {
+  if (customTexts.includes(payload.text)) {
     showToast("该片段已在简历中");
     return;
   }
   try {
     const updated = await api.addVersionSnippet(currentVersion.id, {
-      experience_id: experienceId,
+      experience_id: null,
       text: payload.text,
       source_fact_ids: payload.source_fact_ids,
     });
     versions = versions.map((item) => item.id === updated.id ? updated : item);
     currentVersion = updated;
     await renderDocument();
-    showToast("片段已写入简历");
+    showToast("片段已写入自定义板块");
   } catch (error) {
     showToast(error instanceof ApiError ? error.message : "片段写入失败");
   }

@@ -308,6 +308,39 @@ def create_app(
             linked_skills=payload.linked_skills,
         )
 
+    @app.delete(
+        "/fact-bases/{fact_base_id}/experiences/{experience_id}",
+        response_model=CareerFactBase,
+        tags=["fact-bases"],
+    )
+    def delete_experience(fact_base_id: UUID, experience_id: UUID) -> CareerFactBase:
+        base = container.fact_bases.remove_experience(fact_base_id, experience_id)
+        # 清理版本引用：选中列表、排序与挂在经历上的片段
+        for version in container.version_repository.list(fact_base_id):
+            changed = False
+            if experience_id in version.selected_experience_ids:
+                version.selected_experience_ids = [
+                    item for item in version.selected_experience_ids
+                    if item != experience_id
+                ]
+                changed = True
+            if experience_id in version.ordering:
+                version.ordering = [
+                    item for item in version.ordering if item != experience_id
+                ]
+                changed = True
+            pruned = {
+                key: value
+                for key, value in version.snippets.items()
+                if key != experience_id
+            }
+            if pruned != version.snippets:
+                version.snippets = pruned
+                changed = True
+            if changed:
+                container.versions.save(version)
+        return container.fact_bases.get(fact_base_id)
+
     web_directory = Path(__file__).resolve().parents[1] / "web"
     app.mount(
         "/assets",
@@ -745,6 +778,10 @@ def create_app(
     @app.delete("/versions/{version_id}/snippets/{snippet_id}")
     def delete_version_snippet(version_id: UUID, snippet_id: UUID):
         return container.versions.remove_snippet(version_id, snippet_id)
+
+    @app.post("/versions/{version_id}/experiences/{experience_id}")
+    def include_version_experience(version_id: UUID, experience_id: UUID):
+        return container.versions.include_experience(version_id, experience_id)
 
     @app.post(
         "/versions/{version_id}/activate",

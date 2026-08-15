@@ -159,6 +159,18 @@ class VersionService:
         ]
         return self.save(version)
 
+    def include_experience(
+        self,
+        version_id: UUID,
+        experience_id: UUID,
+    ) -> ResumeVersion:
+        version = self.repository.get(version_id)
+        if experience_id not in version.selected_experience_ids:
+            version.selected_experience_ids = (
+                list(version.selected_experience_ids) + [experience_id]
+            )
+        return self.save(version)
+
     def activate(self, version_id: UUID) -> ResumeVersion:
         return self.repository.activate(version_id)
 

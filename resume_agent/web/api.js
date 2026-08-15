@@ -134,6 +134,14 @@ export function createApi(fetchImpl = globalThis.fetch) {
       `/fact-bases/${factBaseId}/experiences`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
+    deleteExperience: (factBaseId, experienceId) => request(
+      `/fact-bases/${factBaseId}/experiences/${experienceId}`,
+      { method: "DELETE" },
+    ),
+    includeExperience: (versionId, experienceId) => request(
+      `/versions/${versionId}/experiences/${experienceId}`,
+      { method: "POST" },
+    ),
     updateProfile: (factBaseId, profile) => request(
       `/fact-bases/${factBaseId}/profile`,
       { method: "PATCH", body: JSON.stringify(profile) },

@@ -106,3 +106,40 @@ def test_experience_patch_updates_type_and_period(tmp_path):
         assert updated["type"] == "internship"
         assert updated["start"] == "2024-06"
         assert updated["end"] == "2024-09"
+
+
+def test_delete_experience_prunes_version_references(tmp_path):
+    from resume_agent.api.app import create_app
+    from fastapi.testclient import TestClient
+
+    app = create_app(tmp_path / "resume-agent.db")
+    with TestClient(app) as client:
+        base = client.post("/fact-bases", json={"target": {"role": "产品经理"}}).json()
+        updated = client.post(
+            f"/fact-bases/{base['id']}/experiences",
+            json={"organization": "某公司", "role": "实习生"},
+        ).json()
+        experience_id = updated["experiences"][0]["id"]
+        version = client.post(
+            f"/fact-bases/{base['id']}/versions",
+            json={"name": "默认版本", "locale": "zh",
+                  "selected_experience_ids": [experience_id]},
+        ).json()
+        # 挂一个片段到该经历
+        client.post(
+            f"/versions/{version['id']}/snippets",
+            json={"experience_id": experience_id, "text": "某条片段"},
+        )
+
+        deleted = client.delete(
+            f"/fact-bases/{base['id']}/experiences/{experience_id}"
+        )
+        assert deleted.status_code == 200
+        assert deleted.json()["experiences"] == []
+
+        refreshed = client.get(f"/versions/{version['id']}").json()
+        assert experience_id not in refreshed["selected_experience_ids"]
+        assert refreshed["snippets"] == {}
+        # 预览不再报 unknown experience references
+        preview = client.get(f"/versions/{version['id']}/preview")
+        assert preview.status_code == 200

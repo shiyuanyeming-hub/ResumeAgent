@@ -57,16 +57,16 @@ def make_version(base, experiences, *, locale="zh", style=None, base_revision=No
     )
 
 
-def test_renderer_uses_selected_order_and_excludes_unverified():
+def test_renderer_sorts_by_start_desc_and_excludes_unverified():
     base, first, second = evidence_fixture()
     version = make_version(base, [first, second])
-    version.ordering = [second.id, first.id]
+    version.ordering = [second.id, first.id]  # 手动排序应被时间倒序覆盖
 
     result = ResumeRenderer().render(base, version)
 
     assert [item.organization for item in result.experiences] == [
-        "第二家公司",
-        "第一家公司",
+        "第一家公司",  # 2023-01 起
+        "第二家公司",  # 未填时间，排在后面
     ]
     assert "未确认内容" not in result.markdown
     assert "将周报耗时从四小时降到三十分钟" in result.markdown
@@ -220,16 +220,18 @@ def test_zh_omits_self_summary_when_empty():
 from resume_agent.domain.models import VersionSnippet
 
 
-def test_zh_snippet_mode_replaces_auto_bullets():
+def test_zh_experience_shows_confirmed_facts_not_snippets():
     base, first, _ = evidence_fixture()
     version = make_version(base, [first], locale="zh")
     snippet = VersionSnippet(text="搭建并维护用户留存看板")
     version.snippets[first.id] = [snippet]
     rendered = ResumeRenderer().render(base, version)
-    assert "搭建并维护用户留存看板" in rendered.markdown
-    assert "搭建用户留存看板" not in rendered.markdown
-    assert f'data-section="experience:{first.id}"' in rendered.html
-    assert f'data-snippet-id="{snippet.id}"' in rendered.html
+    # 经历板块如实展示已确认事实，不受片段覆盖
+    assert "搭建用户留存看板" in rendered.markdown
+    assert "搭建并维护用户留存看板" not in rendered.markdown
+    # 经历板块不再作为拖放目标，改为整段标识（供删除操作）
+    assert f'data-experience-id="{first.id}"' in rendered.html
+    assert 'data-section="experience:' not in rendered.html
 
 
 def test_zh_custom_snippets_render_and_drop_zone_exists():

@@ -403,3 +403,6 @@ dialog p { color: var(--muted); line-height: 1.6; }
 .photo-preview { width: 84px; height: 110px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border, #d8dde5); margin-top: 10px; }
 .photo-actions { align-items: center; }
 .boot-warning { color: var(--warning, #b45309); font-size: 13px; margin-top: 8px; }
+.facts-toolbar { margin-bottom: 10px; }
+.experience-card-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.danger-text { color: #b91c1c; }

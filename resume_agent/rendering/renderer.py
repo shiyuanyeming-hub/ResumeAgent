@@ -161,16 +161,19 @@ class ResumeRenderer:
                 "unknown experience references: "
                 + ", ".join(sorted(str(item) for item in unknown))
             )
-        selected = set(version.selected_experience_ids)
-        ordered_ids = [item for item in version.ordering if item in selected]
-        ordered_ids.extend(
-            item for item in version.selected_experience_ids if item not in ordered_ids
+        # 未显式选择时默认展示全部经历
+        selected_ids = list(version.selected_experience_ids) or [
+            experience.id for experience in base.experiences
+        ]
+        ordered_experiences = sorted(
+            (by_id[experience_id] for experience_id in selected_ids),
+            key=lambda experience: experience.start or "",
+            reverse=True,
         )
         rendered = []
         has_estimates = False
-        for experience_id in ordered_ids:
-            experience = by_id[experience_id]
-            bullets, experience_has_estimates, snippet_ids = self._bullets(experience, version)
+        for experience in ordered_experiences:
+            bullets, experience_has_estimates = self._bullets(experience)
             has_estimates = has_estimates or experience_has_estimates
             rendered.append(
                 RenderedExperience(
@@ -184,16 +187,13 @@ class ResumeRenderer:
                     ),
                     bullets=bullets,
                     type=experience.type,
-                    snippet_ids=snippet_ids,
                 )
             )
         return rendered, has_estimates
 
     @staticmethod
-    def _bullets(experience: Experience, version: ResumeVersion) -> tuple[list[str], bool, list[UUID]]:
-        snippets = version.snippets.get(experience.id)
-        if snippets:
-            return [snippet.text for snippet in snippets], False, [snippet.id for snippet in snippets]
+    def _bullets(experience: Experience) -> tuple[list[str], bool]:
+        """经历板块如实展示已确认事实，不再被片段覆盖。"""
         bullets: list[str] = []
         seen = set()
         has_estimates = False
@@ -207,7 +207,7 @@ class ResumeRenderer:
                 if value.text not in seen:
                     seen.add(value.text)
                     bullets.append(value.text)
-        return bullets, has_estimates, []
+        return bullets, has_estimates
 
     @staticmethod
     def _collect_skills(
@@ -487,17 +487,14 @@ class ResumeRenderer:
                 meta = " · ".join(
                     item for item in (experience.organization, experience.period) if item
                 )
-                ids = experience.snippet_ids + [None] * max(
-                    0, len(experience.bullets) - len(experience.snippet_ids)
-                )
                 bullets = "".join(
-                    self._bullet_html(item, snippet_id)
-                    for item, snippet_id in zip(experience.bullets, ids)
+                    f"<li>{escape(item)}</li>" for item in experience.bullets
                 )
                 section_html.append(
-                    f'<section class="experience drop-zone" data-section="experience:{experience.id}">'
+                    f'<section class="experience" data-experience-id="{experience.id}">'
                     f"<h3>{escape(experience.role)}</h3>"
-                    f'<p class="meta">{escape(meta)}</p><ul>{bullets}</ul></section>'
+                    f'<p class="meta">{escape(meta)}</p>'
+                    f"{'<ul>' + bullets + '</ul>' if bullets else ''}</section>"
                 )
             groups_html.append(f"<h2>{heading}</h2>{''.join(section_html)}")
         skills_html = "".join(f'<span class="skill">{escape(item)}</span>' for item in skills)
@@ -506,13 +503,14 @@ class ResumeRenderer:
             f"<h2>{copy['education']}</h2>{''.join(education_html)}" if educations else ""
         )
         custom_items = "".join(
-            self._bullet_html(item.text, item.id) for item in version.custom_sections
+            f'<li class="snippet" data-snippet-id="{item.id}">{escape(item.text)}</li>'
+            for item in version.custom_sections
         )
         custom_drop = (
             '<section class="drop-zone custom-snippets" data-section="custom">'
             '<h2>自定义片段</h2>'
             + (f"<ul>{custom_items}</ul>" if custom_items
-               else '<p class="meta">可将片段卡拖到此处，形成简历的自定义内容。</p>')
+               else '<p class="meta">可把个人技能、性格等片段卡拖到此处。</p>')
             + "</section>"
         )
         body = (
@@ -529,17 +527,6 @@ class ResumeRenderer:
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{escape(copy["title"])}</title><style>{css}</style></head>'
             f"<body>{body}</body></html>"
-        )
-
-    @staticmethod
-    def _bullet_html(text, snippet_id):
-        escaped = html.escape(text, quote=True)
-        if snippet_id is None:
-            return f"<li>{escaped}</li>"
-        return (
-            f'<li class="snippet" data-snippet-id="{snippet_id}">{escaped}'
-            f'<button class="snippet-remove" data-snippet-id="{snippet_id}" '
-            f'type="button" aria-label="删除片段">✕</button></li>'
         )
 
     def _markdown(

@@ -130,6 +130,18 @@ class FactBaseService:
         experience.updated_at = utc_now()
         return self._commit(base, expected_revision)
 
+    def remove_experience(
+        self,
+        fact_base_id: UUID,
+        experience_id: UUID,
+    ) -> CareerFactBase:
+        base = self.repository.get(fact_base_id)
+        expected_revision = base.revision
+        base.experiences = [
+            item for item in base.experiences if item.id != experience_id
+        ]
+        return self._commit(base, expected_revision)
+
     def _commit(self, base: CareerFactBase, expected_revision: int) -> CareerFactBase:
         base.revision += 1
         base.updated_at = utc_now()

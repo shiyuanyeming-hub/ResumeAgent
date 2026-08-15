@@ -144,11 +144,6 @@ button:disabled, .button-link.disabled { cursor: not-allowed; opacity: 0.45; }
 .progress-track { display: grid; gap: 4px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .progress-track span { background: #dfe6ee; border-radius: 3px; height: 5px; }
 .progress-track span.complete { background: var(--accent); }
-.chat-messages { display: flex; flex-direction: column; gap: 10px; }
-.message { border-radius: 10px; line-height: 1.65; padding: 11px 13px; }
-.system-message { background: #f8fafc; border: 1px dashed #d8e0ea; color: var(--muted); }
-.assistant-message { align-self: flex-start; background: var(--accent-soft); border: 1px solid #d6e2ef; max-width: 92%; }
-.user-message { align-self: flex-end; background: #edf6ef; border: 1px solid #d1e5d6; max-width: 92%; }
 .text-button { align-self: flex-start; background: transparent; color: var(--muted); min-height: 30px; padding: 4px 8px; }
 .compact-field { color: var(--muted); display: grid; font-size: 12px; gap: 5px; margin-bottom: 10px; }
 .compact-field select { border: 1px solid var(--line); border-radius: 8px; min-height: 36px; padding: 6px 9px; }
@@ -159,30 +154,6 @@ button:disabled, .button-link.disabled { cursor: not-allowed; opacity: 0.45; }
 .badge { background: var(--accent-soft); border-radius: 10px; color: var(--accent); display: inline-block; font-size: 11px; margin-left: 6px; padding: 1px 7px; }
 .badge.warning { background: #fff5dd; color: var(--warning); }
 
-.chat-composer {
-  align-items: stretch;
-  border-top: 1px solid var(--line);
-  display: flex;
-  flex: 0 0 auto;
-  gap: 10px;
-  padding: 10px;
-}
-.chat-composer[hidden] { display: none; }
-
-.chat-composer textarea {
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  color: var(--ink);
-  flex: 1;
-  line-height: 1.5;
-  max-height: 120px;
-  min-height: 54px;
-  min-width: 0;
-  padding: 9px 11px;
-  resize: vertical;
-}
-
-.send-button { min-width: 68px; }
 .section-heading h2 { color: var(--accent); font-size: 16px; margin: 0 0 4px; }
 .section-heading p { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
 .empty-state { border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); padding: 16px; }
@@ -377,6 +348,7 @@ dialog p { color: var(--muted); line-height: 1.6; }
 .question-dialog::backdrop { background: rgba(15, 23, 42, 0.35); }
 .mentor-analysis { background: #f6f9ff; border: 1px solid #dbe7ff; border-radius: 10px; }
 .mentor-analysis ul { margin: 6px 0 0; padding-left: 18px; }
+.job-analysis-card { margin-bottom: 12px; }
 .interview-option-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .chip-button { border: 1px solid var(--border, #d8dde5); border-radius: 999px; padding: 5px 12px; background: #fff; cursor: pointer; }
 .chip-button:hover { border-color: var(--accent, #1d4ed8); background: #eff6ff; }
@@ -445,7 +417,7 @@ body {
   color: var(--accent);
 }
 .primary-tabs button::before { margin-right: 6px; }
-.primary-tabs button[data-tab="chat"]::before { content: "💬"; }
+.primary-tabs button[data-tab="chat"]::before { content: "🧭"; }
 .primary-tabs button[data-tab="facts"]::before { content: "📋"; }
 .primary-tabs button[data-tab="jd"]::before { content: "📄"; }
 .primary-tabs button[data-tab="tools"]::before { content: "🛠️"; }

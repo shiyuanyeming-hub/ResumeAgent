@@ -13,7 +13,7 @@ def test_root_serves_original_workbench_shell(tmp_path):
     assert all(
         label in response.text for label in ("访谈", "事实库", "JD 定制", "工具")
     )
-    assert 'id="chat-composer"' in response.text
+    assert 'id="question-dialog"' in response.text
     assert 'id="preview-frame"' in response.text
     assert 'id="base-select"' in response.text
     assert 'id="new-base-button"' in response.text

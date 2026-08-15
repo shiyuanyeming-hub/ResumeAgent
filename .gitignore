@@ -21,3 +21,7 @@ dist/
 
 # macOS
 .DS_Store
+
+# 运行数据（照片与学校模板文件）
+data/photos/
+data/templates/

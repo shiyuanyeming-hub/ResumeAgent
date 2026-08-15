@@ -119,7 +119,6 @@ function selectTab(name) {
   for (const panel of document.querySelectorAll("[data-panel]")) {
     panel.hidden = panel.dataset.panel !== selected;
   }
-  byId("chat-composer").hidden = selected !== "chat" || !currentBase;
   state.tab = selected;
   saveState();
 }
@@ -170,25 +169,12 @@ function resetEditorState() {
   if (frame?.contentDocument) frame.contentDocument.designMode = "off";
 }
 
-function resetComposerAction() {
-  const submit = byId("chat-composer")?.querySelector('button[type="submit"]');
-  if (submit) {
-    submit.disabled = false;
-    submit.textContent = "发送回答";
-  }
-}
-
 function setSessionTransitionUi() {
   const transitioning = sessionTransitionGate.isTransitioning();
   const panel = byId("chat-panel");
-  const composer = byId("chat-composer");
   panel.toggleAttribute("aria-busy", transitioning);
-  composer.toggleAttribute("aria-busy", transitioning);
   for (const control of panel.querySelectorAll("button, select")) {
     control.disabled = transitioning || control.disabled;
-  }
-  for (const control of composer.querySelectorAll("button, textarea")) {
-    control.disabled = transitioning;
   }
   byId("base-select").disabled = transitioning || bases.length === 0;
   byId("new-base-button").disabled = transitioning || (bases.length > 0 && !currentBase);
@@ -314,7 +300,6 @@ async function activateBase(base) {
       versionId: currentVersion?.id || "",
     });
     await refreshQuestionnaire();
-    resetComposerAction();
     presentQuestionCard(questionnaireState?.next || null);
     byId("language-button").textContent = LANGUAGE_LABELS[state.locale];
     finishSessionTransition(transition);
@@ -347,7 +332,6 @@ function startNewBase() {
   languageTransitioning = false;
   documentCommitGeneration += 1;
   resetEditorState();
-  resetComposerAction();
   currentBase = null;
   currentSession = null;
   currentExperienceQuality = null;
@@ -409,7 +393,6 @@ async function activateExperience(experienceId) {
       experienceId,
       sessionId: session?.id || "",
     });
-    resetComposerAction();
     finishSessionTransition(transition);
     return true;
   } catch (error) {
@@ -460,7 +443,6 @@ function renderOnboarding(bootFailed = false) {
     });
     panel.append(retry);
   }
-  byId("chat-composer").hidden = true;
 }
 
 let pendingTemplateFile = null;
@@ -512,7 +494,6 @@ function showTemplateChoice() {
     + "PDF 需带可填写表单字段，系统会自动识别并填充。",
   );
   panel.append(heading, choices, hint);
-  byId("chat-composer").hidden = true;
 }
 
 function showRoleForm() {
@@ -534,7 +515,6 @@ function showRoleForm() {
   form.append(submit);
   form.addEventListener("submit", startMentorSession);
   panel.append(heading, form);
-  byId("chat-composer").hidden = true;
 }
 
 async function startMentorSession(event) {
@@ -588,27 +568,12 @@ async function startMentorSession(event) {
       await chooseVersion(version.id);
     }
     await refreshQuestionnaire();
-    appendJobAnalysis();
     renderConversation();
     presentQuestionCard(questionnaireState?.next || null);
   } catch (error) {
     showToast(error instanceof ApiError ? error.message : "档案创建失败");
     submit.disabled = false;
   }
-}
-
-function appendJobAnalysis() {
-  const analysis = questionnaireState?.jobAnalysis;
-  if (!analysis || !analysis.length) return;
-  const messagesBox = byId("chat-messages");
-  if (!messagesBox) return;
-  const intro = element("div", "message assistant-message mentor-analysis");
-  const heading = element("strong", "", "关于「" + (currentBase?.target?.role || "这个岗位") + "」，导师想说：");
-  const list = document.createElement("ul");
-  for (const item of analysis) list.append(element("li", "", item));
-  intro.append(heading, list);
-  messagesBox.append(intro);
-  messagesBox.scrollTop = messagesBox.scrollHeight;
 }
 
 function experienceSelector() {
@@ -667,7 +632,20 @@ function renderConversation() {
   }
   const panel = byId("chat-panel");
   panel.replaceChildren();
-  panel.append(sectionNavElement(), questionAreaElement(), experienceSelector(), renderInterviewProgress());
+  panel.append(sectionNavElement(), experienceSelector(), renderInterviewProgress());
+
+  const analysis = questionnaireState?.jobAnalysis || [];
+  if (analysis.length) {
+    const card = element("div", "mentor-analysis job-analysis-card");
+    card.append(element(
+      "strong", "",
+      `关于「${currentBase?.target?.role || "这个岗位"}」，导师想说：`,
+    ));
+    const list = document.createElement("ul");
+    for (const item of analysis) list.append(element("li", "", item));
+    card.append(list);
+    panel.append(card);
+  }
 
   const hasPendingOrQuestion = Boolean(currentSession)
     && (Object.values(currentSession.pending_proposals || {}).length > 0
@@ -682,30 +660,6 @@ function renderConversation() {
     actions.append(resume);
     panel.append(actions);
   }
-
-  const messages = element("div", "chat-messages");
-  messages.id = "chat-messages";
-  if (!currentSession) {
-    const experience = currentBase.experiences.find((item) => item.id === state.experienceId);
-    messages.append(element(
-      "div",
-      "message system-message",
-      experience
-        ? `当前经历：${experience.organization} · ${experience.role}。导师会一次问一个问题，你只需要点选或按真实情况回答。`
-        : "先添加一段经历，再开始访谈。",
-    ));
-  } else {
-    for (const message of currentSession.messages) {
-      messages.append(element(
-        "div",
-        `message ${message.role === "user" ? "user-message" : "assistant-message"}`,
-        message.content,
-      ));
-    }
-  }
-  panel.append(messages);
-  byId("chat-composer").hidden = state.tab !== "chat";
-  messages.scrollTop = messages.scrollHeight;
   setSessionTransitionUi();
 }
 
@@ -730,10 +684,6 @@ function sectionNavElement() {
     nav.append(chip);
   }
   return nav;
-}
-
-function questionAreaElement() {
-  return element("div", "question-area");
 }
 
 function showCompletionCard(force = false) {
@@ -1587,40 +1537,6 @@ async function finishInterviewNow() {
     showToast(error instanceof ApiError ? error.message : "结束访谈失败");
   } finally {
     setInterviewBusy(false);
-  }
-}
-
-async function submitAnswer(event) {
-  event.preventDefault();
-  if (!currentBase || interviewBusy) return;
-  const input = byId("chat-input");
-  const message = input.value.trim();
-  if (!message) return;
-  const submit = event.currentTarget.querySelector("button[type=submit]");
-  submit.disabled = true;
-  submit.textContent = "正在发送…";
-  try {
-    if (!currentSession) {
-      const experienceId = state.experienceId
-        || currentBase.experiences.at(-1)?.id
-        || "";
-      if (!experienceId) {
-        showToast("先添加一段经历，再开始访谈");
-        return;
-      }
-      const session = await ensureInterviewSession(experienceId);
-      if (!session) return;
-    }
-    input.value = "";
-    await submitInterviewAnswer(message);
-  } catch (error) {
-    showToast(error instanceof ApiError ? error.message : "回答发送失败");
-  } finally {
-    const fresh = byId("chat-composer")?.querySelector('button[type="submit"]');
-    if (fresh) {
-      fresh.disabled = false;
-      fresh.textContent = "发送回答";
-    }
   }
 }
 
@@ -2704,7 +2620,6 @@ byId("base-select").addEventListener("change", async (event) => {
 byId("sample-button").addEventListener("click", createSample);
 byId("new-base-button").addEventListener("click", startNewBase);
 byId("language-button").addEventListener("click", cycleLanguage);
-byId("chat-composer").addEventListener("submit", submitAnswer);
 byId("edit-button").addEventListener("click", () => {
   if (editMode) saveEditor();
   else beginEditor();

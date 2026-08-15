@@ -1193,7 +1193,7 @@ function interviewStartCard(card) {
     element("p", "question-prompt", card.prompt),
     element(
       "p", "question-hint",
-      "导师会一步步追问：做了什么、怎么做的、结果如何。每个问题都有选项，点选即可，也可以自己写。",
+      "导师会一步步追问：做了什么、怎么做的、结果如何。每个问题都有选项，点选即可，也可以自己写。答多少算多少，随时点「答完了，就用这些」结束，已确认的内容都会写进简历。",
     ),
   );
   const actions = element("div", "question-actions");
@@ -1255,9 +1255,13 @@ async function beginInterviewFlow(card) {
 function interviewQuestionCard(question) {
   const article = element("article", "question-card interview-card");
   const dim = DIMENSIONS.find(([key]) => key === question.dimension);
+  const completed = currentExperienceQuality?.present_dimensions;
+  const progressText = Number.isInteger(completed)
+    ? `已收集 ${completed}/6 个维度 · 回答多少算多少，随时可以结束`
+    : "回答多少算多少，随时可以结束";
   article.append(
     element("p", "question-prompt", question.text),
-    element("p", "question-hint", `当前追问：${dim ? dim[1] : question.dimension}`),
+    element("p", "question-hint", `当前追问：${dim ? dim[1] : question.dimension} · ${progressText}`),
   );
   const options = question.options || [];
   let freeInput = null;
@@ -1312,8 +1316,14 @@ function interviewQuestionCard(question) {
   const unknown = element("button", "text-button", "暂时想不到");
   unknown.type = "button";
   unknown.addEventListener("click", () => interviewUnknown(question.dimension));
+  const finish = element("button", "primary", "答完了，就用这些");
+  finish.type = "button";
+  finish.addEventListener("click", finishInterviewNow);
   actions.append(regenerate, unknown);
   article.append(actions);
+  const finishRow = element("div", "question-actions");
+  finishRow.append(finish);
+  article.append(finishRow);
   return article;
 }
 
@@ -1339,7 +1349,10 @@ function interviewProposalCard(proposal) {
   const reject = element("button", "", "这不是我的意思");
   reject.type = "button";
   reject.addEventListener("click", () => rejectInterviewProposal(proposal.id));
-  actions.append(confirm, reject);
+  const finish = element("button", "", "确认并结束访谈");
+  finish.type = "button";
+  finish.addEventListener("click", finishInterviewNow);
+  actions.append(confirm, reject, finish);
   article.append(actions);
   return article;
 }
@@ -1497,6 +1510,36 @@ async function finishInterviewFlow(experienceId) {
     return;
   }
   presentQuestionCard(next);
+}
+
+async function finishInterviewNow() {
+  if (!currentBase || !currentSession || interviewBusy) return;
+  setInterviewBusy(true);
+  try {
+    // 1) 确认所有待确认事实（用户答了多少就用多少）
+    let session = currentSession;
+    while (Object.keys(session.pending_proposals || {}).length) {
+      const proposal = Object.values(session.pending_proposals)[0];
+      await api.confirmProposal(session.id, proposal.id);
+      session = await api.getSession(session.id);
+    }
+    currentSession = session;
+    await refreshAfterInterviewTurn();
+    // 2) 结束访谈：跳过问卷中的访谈卡，向导继续下一步
+    await refreshQuestionnaire();
+    const card = questionnaireState?.next;
+    if (card && card.kind === "interview") {
+      await api.skipQuestion(currentBase.id, card.step_id);
+      await refreshQuestionnaire();
+    }
+    renderConversation();
+    presentQuestionCard(questionnaireState?.next || null);
+    showToast("访谈已结束，已确认的事实都会写入简历");
+  } catch (error) {
+    showToast(error instanceof ApiError ? error.message : "结束访谈失败");
+  } finally {
+    setInterviewBusy(false);
+  }
 }
 
 async function submitAnswer(event) {

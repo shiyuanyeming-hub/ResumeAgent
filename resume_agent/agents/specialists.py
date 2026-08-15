@@ -155,8 +155,15 @@ class StructuredExperienceOptionsAgent:
     def __init__(self, runner) -> None:
         self.runner = runner
 
-    def options(self, target_role: str) -> List[dict]:
+    def options(self, target_role: str, previous: list[str] | None = None) -> List[dict]:
         prompt = f"{EXPERIENCE_OPTIONS_PROMPT}\n目标岗位：{target_role}"
+        if previous:
+            prompt += (
+                "\n\n注意：用户认为上一批选项都不合适（"
+                + "、".join(previous)
+                + "）。请换一个角度生成全新的一批，不要重复上面任何一个，"
+                "并更贴近用户的真实经历。"
+            )
         payload = run_structured(self.runner, prompt, ExperienceOptionsPayload)
         return [
             {"label": item.label.strip(), "type": item.type}
@@ -169,7 +176,13 @@ class StructuredFollowUpOptionsAgent:
     def __init__(self, runner) -> None:
         self.runner = runner
 
-    def options(self, target_role: str, experience_text: str, dimension: str) -> List[str]:
+    def options(
+        self,
+        target_role: str,
+        experience_text: str,
+        dimension: str,
+        previous: list[str] | None = None,
+    ) -> List[str]:
         prompt_template = ROLE_OPTIONS_PROMPT if dimension == "role" else FOLLOWUP_OPTIONS_PROMPT
         prompt = (
             f"{prompt_template}\n"
@@ -177,5 +190,12 @@ class StructuredFollowUpOptionsAgent:
             f"当前经历：{experience_text}\n"
             f"追问维度：{dimension}"
         )
+        if previous:
+            prompt += (
+                "\n\n注意：用户认为上一批选项都不合适（"
+                + "、".join(previous)
+                + "）。请换一个角度，生成全新的一批选项，不要重复上面任何一个，"
+                "并且更贴近用户在这段经历中的真实情况。"
+            )
         payload = run_structured(self.runner, prompt, FollowUpOptionsPayload)
         return [item.strip() for item in payload.options if item.strip()]

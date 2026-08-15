@@ -304,3 +304,44 @@ def test_question_writer_falls_back_offline_when_unavailable():
     assert question is not None
     assert question.dimension is QualityDimension.CONTEXT
     assert question.text == "这段经历当时要解决的具体问题或背景是什么？"
+
+
+def test_regenerate_options_replaces_current_question_options():
+    seen = []
+
+    class RegenerateGuide:
+        def followup_options(self, role, text, dimension, previous=None):
+            seen.append(list(previous or []))
+            return ["新选项A", "新选项B"]
+
+    base = CareerFactBase()
+    experience = base.add_experience("星河科技", "实习生")
+    session = InterviewSession(
+        fact_base_id=base.id, active_experience_id=experience.id,
+        current_question=InterviewQuestion(
+            dimension=QualityDimension.CONTEXT, text="当时要解决什么问题？",
+            priority=0.5, escalation="direct", options=["旧选项1", "旧选项2"],
+        ),
+    )
+    bases = InMemoryFactBaseRepository([base])
+    sessions = InMemorySessionRepository([session])
+    guide = RegenerateGuide()
+    service = InterviewService(
+        bases, sessions, StubAuditAgent(), StubQuestionWriter(), guide=guide,
+    )
+    question = service.regenerate_options(session.id)
+    assert question is not None
+    assert question.options == ["新选项A", "新选项B"]
+    assert seen[-1] == ["旧选项1", "旧选项2"]
+    stored = sessions.get(session.id)
+    assert stored.current_question.options == ["新选项A", "新选项B"]
+
+
+def test_regenerate_options_requires_current_question():
+    service, session, bases, sessions, experience = make_interview()
+    try:
+        service.regenerate_options(session.id)
+    except ValueError as error:
+        assert "没有等待回答的问题" in str(error)
+    else:
+        raise AssertionError("无当前问题时应拒绝换一批")

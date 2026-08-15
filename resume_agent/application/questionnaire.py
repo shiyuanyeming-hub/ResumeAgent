@@ -60,6 +60,7 @@ class QuestionCard(BaseModel):
     values: List[str] = Field(default_factory=list)
     extra: Dict[str, str] = Field(default_factory=dict)
     skippable: bool = True
+    regeneratable: bool = False
 
 
 class SectionProgress(BaseModel):
@@ -253,6 +254,7 @@ class QuestionnaireEngine:
                 "experience:add", "experience", QuestionKind.CHOICE_FREE,
                 "你做过以下哪些事情？（选一个，也可以自己补充）",
                 options=type_options,
+                regeneratable=self.guide is not None,
             )
         for experience in base.experiences:
             card = self._experience_field_card(base, state, experience)
@@ -290,11 +292,14 @@ class QuestionnaireEngine:
             and not experience.role
             and not self._skipped(state, f"experience:{experience.id}:role")
         ):
+            options = self._role_options(base, experience)
+            state.role_options_cache[str(experience.id)] = list(options)
             return self._card(
                 f"experience:{experience.id}:role", "experience",
                 QuestionKind.CHOICE_FREE, "你当时担任的岗位是？（可跳过）",
-                options=self._role_options(base, experience),
+                options=options,
                 skippable=True,
+                regeneratable=self.guide is not None,
             )
         if not experience.start and not self._skipped(state, f"experience:{experience.id}:period"):
             return self._card(
@@ -442,7 +447,11 @@ class QuestionnaireService:
             state.updated_at = utc_now()
             self.repository.save(state)
         self._refresh_mentor_candidates(base, state)
-        return self.engine.next_card(base, state, version=version)
+        card = self.engine.next_card(base, state, version=version)
+        # 持久化引擎在出卡时写入的缓存（如岗位选项缓存，供「换一批」使用）
+        state.updated_at = utc_now()
+        self.repository.save(state)
+        return card
 
     def progress(self, fact_base_id, version=None):
         base = self.fact_bases.get(fact_base_id)
@@ -482,6 +491,48 @@ class QuestionnaireService:
         state.updated_at = utc_now()
         self.repository.save(state)
         return self.next_card(fact_base_id)
+
+    def regenerate_options(self, fact_base_id, step_id):
+        """「换一批」：带上上一批选项重新生成，让 AI 换角度给出新选项。"""
+        base = self.fact_bases.get(fact_base_id)
+        state = self._state(fact_base_id)
+        role = base.target.role.strip()
+        if step_id == "experience:add":
+            previous = list(state.experience_type_map.keys())
+            if self.guide is None:
+                return [label for _, label in EXPERIENCE_TYPE_OPTIONS]
+            options = self.guide.experience_options(role, previous=previous)
+            state.experience_type_map = {
+                item["label"]: item["type"] for item in options
+            }
+            state.updated_at = utc_now()
+            self.repository.save(state)
+            return [item["label"] for item in options]
+        if step_id.startswith("experience:") and step_id.endswith(":role"):
+            experience_id = UUID(step_id.split(":")[1])
+            experience = base.get_experience(experience_id)
+            previous = state.role_options_cache.get(str(experience_id), [])
+            if not previous:
+                card = self.engine._experience_field_card(base, state, experience)
+                previous = list(card.options) if card is not None else []
+            if self.guide is None:
+                return self._role_options(base, experience)
+            type_labels = {
+                ExperienceType.INTERNSHIP: "实习",
+                ExperienceType.WORK: "工作",
+            }
+            type_label = type_labels.get(experience.type, "实习")
+            options = self.guide.followup_options(
+                role,
+                f"{type_label}经历 · {experience.organization or type_label} · 担任岗位",
+                "role",
+                previous=previous,
+            )
+            state.role_options_cache[str(experience_id)] = list(options)
+            state.updated_at = utc_now()
+            self.repository.save(state)
+            return options
+        raise ValueError(f"该步骤不支持换一批: {step_id}")
 
     def _bump(self, base):
         expected_revision = base.revision

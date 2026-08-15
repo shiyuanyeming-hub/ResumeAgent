@@ -553,3 +553,94 @@ def test_education_degree_first_flow():
     assert loaded.educations[0].rank == "前10%"
     assert loaded.educations[0].research_direction == "数据挖掘"
     assert loaded.educations[0].thesis == "基于深度学习的推荐系统"
+
+
+def test_regenerate_experience_options_passes_previous_and_updates_map():
+    calls = {}
+
+    class RegenerateGuide:
+        def analyze_job(self, role):
+            return []
+
+        def experience_options(self, role, previous=None):
+            calls["previous"] = list(previous or [])
+            return [
+                {"label": "Agent 开发项目", "type": "project"},
+                {"label": "AI 产品实习", "type": "internship"},
+            ]
+
+        def followup_options(self, role, text, dimension, previous=None):
+            return []
+
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    regenerate_guide = RegenerateGuide()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(),
+        QuestionnaireEngine(guide=regenerate_guide),
+        guide=regenerate_guide,
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="产品经理")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "experience:add"
+    assert card.regeneratable is True
+    initial_labels = list(card.options)
+
+    options = questionnaire.regenerate_options(base.id, "experience:add")
+    assert calls["previous"] == initial_labels
+    assert options == ["Agent 开发项目", "AI 产品实习"]
+    state = questionnaire._state(base.id)
+    assert state.experience_type_map == {
+        "Agent 开发项目": "project", "AI 产品实习": "internship",
+    }
+
+
+def test_regenerate_role_options_passes_previous():
+    calls = []
+
+    class RoleGuide:
+        def analyze_job(self, role):
+            return []
+
+        def experience_options(self, role, previous=None):
+            return [{"label": "产品实习", "type": "internship"}]
+
+        def followup_options(self, role, text, dimension, previous=None):
+            calls.append(list(previous or []))
+            return [f"新岗位{len(calls)}"]
+
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    role_guide = RoleGuide()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(),
+        QuestionnaireEngine(guide=role_guide),
+        guide=role_guide,
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="产品经理")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    questionnaire.answer(base.id, "experience:add", value="产品实习")
+    loaded = questionnaire.fact_bases.get(base.id)
+    experience_id = loaded.experiences[0].id
+    questionnaire.answer(base.id, f"experience:{experience_id}:organization", value="字节跳动")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == f"experience:{experience_id}:role"
+    assert card.regeneratable is True
+    assert card.options == ["新岗位1"]
+
+    options = questionnaire.regenerate_options(base.id, f"experience:{experience_id}:role")
+    assert calls[-1] == ["新岗位1"]
+    assert options == ["新岗位2"]

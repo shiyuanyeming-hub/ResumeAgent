@@ -203,6 +203,14 @@ export function createApi(fetchImpl = globalThis.fetch) {
       `/fact-bases/${factBaseId}/questionnaire/skip`,
       { method: "POST", body: JSON.stringify({ step_id: stepId }) },
     ),
+    regenerateQuestionOptions: (factBaseId, stepId) => request(
+      `/fact-bases/${factBaseId}/questionnaire/regenerate-options`,
+      { method: "POST", body: JSON.stringify({ step_id: stepId }) },
+    ),
+    regenerateInterviewOptions: (sessionId) => request(
+      `/sessions/${sessionId}/regenerate-options`,
+      { method: "POST" },
+    ),
     listSessions: (factBaseId, experienceId = "") => {
       const query = experienceId
         ? `?experience_id=${encodeURIComponent(experienceId)}`

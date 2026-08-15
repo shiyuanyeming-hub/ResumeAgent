@@ -274,6 +274,7 @@ class QuestionnaireState(BaseModel):
     edited_education_id: Optional[UUID] = None
     edited_experience_id: Optional[UUID] = None
     pending_education_degree: str = ""
+    role_options_cache: Dict[str, List[str]] = Field(default_factory=dict)
     course_options: List[str] = Field(default_factory=list)
     skill_options: List[str] = Field(default_factory=list)
     job_analysis: List[str] = Field(default_factory=list)

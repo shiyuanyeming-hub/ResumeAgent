@@ -257,6 +257,26 @@ class InterviewService:
             self.sessions.save(session)
         return question
 
+    def regenerate_options(self, session_id: UUID) -> Optional[MentorQuestion]:
+        """「换一批」：把当前问题的上一批选项作为反例，让 AI 重新生成选项。"""
+        session = self.sessions.get(session_id)
+        question = session.current_question
+        if question is None:
+            raise ValueError("当前没有等待回答的问题，无法换一批")
+        base = self.fact_bases.get(session.fact_base_id)
+        experience = base.get_experience(session.active_experience_id)
+        if self.guide is not None:
+            options = self.guide.followup_options(
+                base.target.role,
+                self._experience_context(experience),
+                question.dimension.value,
+                previous=list(question.options),
+            )
+            question.options = options
+            session.updated_at = utc_now()
+            self.sessions.save(session)
+        return question
+
     def _offline_proposal(
         self,
         message: str,

@@ -967,40 +967,65 @@ function renderQuestionCard(card) {
     }
   } else if (card.kind === "choice" || card.kind === "choice_free") {
     const optionsBox = element("div", "choice-options");
-    const optionCount = (card.options || []).length;
-    for (const option of card.options || []) {
-      const label = element("label", "check-row");
-      const radio = document.createElement("input");
-      radio.type = "radio";
-      radio.name = `choice-${card.step_id}`;
-      radio.value = option;
-      if (optionCount === 1) radio.checked = true;
-      label.append(radio, document.createTextNode(option));
-      optionsBox.append(label);
-    }
     let freeInput = null;
-    if (card.kind === "choice_free") {
-      freeInput = document.createElement("input");
-      freeInput.placeholder = "其他，自己填写";
-      optionsBox.append(freeInput);
-      // 单选互斥：点选项清空「其他」；在「其他」里输入则取消已选选项
-      const radios = [...optionsBox.querySelectorAll('input[type="radio"]')];
-      for (const radio of radios) {
-        radio.addEventListener("change", () => {
-          if (radio.checked && freeInput) freeInput.value = "";
+    const rebuildChoiceOptions = (options) => {
+      const currentFree = freeInput?.value || "";
+      optionsBox.replaceChildren();
+      for (const option of options || []) {
+        const label = element("label", "check-row");
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = `choice-${card.step_id}`;
+        radio.value = option;
+        label.append(radio, document.createTextNode(option));
+        optionsBox.append(label);
+      }
+      if (card.kind === "choice_free") {
+        freeInput = document.createElement("input");
+        freeInput.placeholder = "其他，自己填写";
+        freeInput.value = currentFree;
+        optionsBox.append(freeInput);
+        // 单选互斥：点选项清空「其他」；在「其他」里输入则取消已选选项
+        const radios = () => [...optionsBox.querySelectorAll('input[type="radio"]')];
+        for (const radio of radios()) {
+          radio.addEventListener("change", () => {
+            if (radio.checked && freeInput) freeInput.value = "";
+          });
+        }
+        freeInput.addEventListener("input", () => {
+          if (!freeInput.value) return;
+          for (const radio of radios()) radio.checked = false;
         });
       }
-      freeInput.addEventListener("input", () => {
-        if (!freeInput.value) return;
-        for (const radio of radios) radio.checked = false;
-      });
-    }
+    };
+    rebuildChoiceOptions(card.options || []);
     form.append(optionsBox);
     readValue = () => {
       const checked = form.querySelector('input[type="radio"]:checked');
       if (checked) return { value: checked.value };
       return { value: freeInput ? freeInput.value.trim() : "" };
     };
+    if (card.regeneratable) {
+      const regenerate = element("button", "text-button", "换一批");
+      regenerate.type = "button";
+      regenerate.addEventListener("click", async () => {
+        if (!currentBase || regenerate.disabled) return;
+        regenerate.disabled = true;
+        regenerate.textContent = "正在换一批…";
+        try {
+          const result = await api.regenerateQuestionOptions(currentBase.id, card.step_id);
+          rebuildChoiceOptions(result.options || []);
+          regenerate.disabled = false;
+          regenerate.textContent = "换一批";
+          showToast("已换一批新选项");
+        } catch (error) {
+          showToast(error instanceof ApiError ? error.message : "换一批失败");
+          regenerate.disabled = false;
+          regenerate.textContent = "换一批";
+        }
+      });
+      form.append(regenerate);
+    }
   } else if (card.kind === "multi_choice") {
     const chips = element("div", "choice-options chips");
     const selected = new Set(card.values || []);
@@ -1266,10 +1291,28 @@ function interviewQuestionCard(question) {
   freeRow.append(freeInput, send);
   article.append(freeRow);
   const actions = element("div", "question-actions");
+  const regenerate = element("button", "text-button", "换一批");
+  regenerate.type = "button";
+  regenerate.addEventListener("click", async () => {
+    if (!currentSession || interviewBusy || regenerate.disabled) return;
+    regenerate.disabled = true;
+    regenerate.textContent = "正在换一批…";
+    try {
+      const question = await api.regenerateInterviewOptions(currentSession.id);
+      if (!currentSession || !question) return;
+      currentSession = { ...currentSession, current_question: question };
+      renderConversation();
+      showDialogCard(interviewQuestionCard(question));
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "换一批失败");
+      regenerate.disabled = false;
+      regenerate.textContent = "换一批";
+    }
+  });
   const unknown = element("button", "text-button", "暂时想不到");
   unknown.type = "button";
   unknown.addEventListener("click", () => interviewUnknown(question.dimension));
-  actions.append(unknown);
+  actions.append(regenerate, unknown);
   article.append(actions);
   return article;
 }

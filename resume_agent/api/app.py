@@ -252,6 +252,17 @@ def create_app(
             "next": container.questionnaires.skip(fact_base_id, payload.step_id),
         }
 
+    @app.post("/fact-bases/{fact_base_id}/questionnaire/regenerate-options")
+    def questionnaire_regenerate_options(
+        fact_base_id: UUID,
+        payload: QuestionnaireSkipRequest,
+    ):
+        return {
+            "options": container.questionnaires.regenerate_options(
+                fact_base_id, payload.step_id
+            ),
+        }
+
     @app.post("/fact-bases/{fact_base_id}/educations", status_code=201)
     def create_education(fact_base_id: UUID, payload: EducationCreateRequest):
         education = Education(
@@ -682,6 +693,16 @@ def create_app(
     )
     def current_question(session_id: UUID) -> Optional[MentorQuestion]:
         return container.interviews.next_question(session_id)
+
+    @app.post(
+        "/sessions/{session_id}/regenerate-options",
+        response_model=Optional[MentorQuestion],
+        tags=["interviews"],
+    )
+    def regenerate_question_options(
+        session_id: UUID,
+    ) -> Optional[MentorQuestion]:
+        return container.interviews.regenerate_options(session_id)
 
     @app.post(
         "/fact-bases/{fact_base_id}/versions",

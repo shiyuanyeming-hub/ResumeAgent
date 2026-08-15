@@ -75,3 +75,34 @@ def test_guide_falls_back_when_advisor_fails():
     assert len(service.analyze_job("产品经理")) >= 3
     assert len(service.experience_options("产品经理")) == 6
     assert service.followup_options("产品经理", "星河科技 · 实习生", "action")
+
+
+def test_followup_options_passes_previous_to_advisor():
+    seen = {}
+
+    class Advisor:
+        def options(self, role, text, dimension, previous=None):
+            seen["previous"] = previous
+            return ["新选项一", "新选项二"]
+
+    service = MentorGuideService(followup_advisor=Advisor())
+    result = service.followup_options(
+        "产品经理", "实习经历 · 字节跳动 · 担任岗位", "role",
+        previous=["AI产品实习生"],
+    )
+    assert seen["previous"] == ["AI产品实习生"]
+    assert result == ["新选项一", "新选项二"]
+
+
+def test_experience_options_passes_previous_to_advisor():
+    seen = {}
+
+    class Advisor:
+        def options(self, role, previous=None):
+            seen["previous"] = previous
+            return [{"label": "Agent 开发项目", "type": "project"}]
+
+    service = MentorGuideService(experience_advisor=Advisor())
+    result = service.experience_options("产品经理", previous=["产品实习"])
+    assert seen["previous"] == ["产品实习"]
+    assert result[0]["label"] == "Agent 开发项目"

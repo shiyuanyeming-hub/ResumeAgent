@@ -57,22 +57,32 @@ class MentorGuideService:
                 pass  # 离线或失败降级为模板
         return list(OFFLINE_JOB_ANALYSIS)
 
-    def experience_options(self, target_role):
+    def experience_options(self, target_role, previous=None):
         if self.experience_advisor is not None:
             try:
-                options = self.experience_advisor.options(target_role)
+                if previous:
+                    options = self.experience_advisor.options(
+                        target_role, previous=previous
+                    )
+                else:
+                    options = self.experience_advisor.options(target_role)
                 if options:
                     return options
             except Exception:
                 pass
         return offline_experience_options()
 
-    def followup_options(self, target_role, experience_text, dimension):
+    def followup_options(self, target_role, experience_text, dimension, previous=None):
         if self.followup_advisor is not None:
             try:
-                options = self.followup_advisor.options(
-                    target_role, experience_text, dimension
-                )
+                if previous:
+                    options = self.followup_advisor.options(
+                        target_role, experience_text, dimension, previous=previous
+                    )
+                else:
+                    options = self.followup_advisor.options(
+                        target_role, experience_text, dimension
+                    )
                 if options:
                     return options
             except Exception:

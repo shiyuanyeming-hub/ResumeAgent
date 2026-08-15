@@ -426,7 +426,7 @@ class ResumeRenderer:
         escape = lambda value: html.escape(value, quote=True)
         css = f"""
         :root {{--accent:{theme.accent};--secondary:{theme.secondary};--tint:{theme.tint};--border:{theme.border};}}
-        @page {{ size: A4; margin: 15mm 18mm; }}
+        @page {{ size: A4; margin: 17mm 20mm; }}
         * {{ box-sizing: border-box; }}
         body {{ font-family:{theme.font_family}; color:#1f2937; font-size:10pt; line-height:1.66; margin:0; }}
         header {{ border-bottom:2.5pt solid var(--accent); padding-bottom:4mm; margin-bottom:6mm; display:flex; justify-content:space-between; gap:6mm; align-items:center; }}

@@ -488,18 +488,18 @@ function showTemplateChoice() {
   const system = element("button", "primary language-choice", "使用系统模板（推荐）");
   system.type = "button";
   system.addEventListener("click", showRoleForm);
-  const upload = element("button", "language-choice", "上传学校模板（HTML）");
+  const upload = element("button", "language-choice", "上传学校模板（HTML / 表单 PDF）");
   upload.type = "button";
   const fileInput = document.createElement("input");
   fileInput.type = "file";
-  fileInput.accept = ".html,.htm";
+  fileInput.accept = ".html,.htm,.pdf";
   fileInput.hidden = true;
   upload.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => {
     const file = fileInput.files?.[0];
     if (!file) return;
-    if (!/\.html?$/i.test(file.name)) {
-      showToast("请选择 HTML 格式的模板文件");
+    if (!/\.(html?|pdf)$/i.test(file.name)) {
+      showToast("请选择 HTML 或 PDF 格式的模板文件");
       return;
     }
     pendingTemplateFile = file;
@@ -508,7 +508,8 @@ function showTemplateChoice() {
   choices.append(system, upload, fileInput);
   const hint = element(
     "p", "quality-caption",
-    "模板占位符（可选）：{{header}} {{education}} {{experience_work}} {{experience_projects}} {{skills}} {{summary}}；没有占位符时退回系统版式。",
+    "HTML 占位符：{{header}} {{education}} {{experience_work}} {{experience_projects}} {{skills}} {{summary}}；"
+    + "PDF 需带可填写表单字段，系统会自动识别并填充。",
   );
   panel.append(heading, choices, hint);
   byId("chat-composer").hidden = true;
@@ -553,7 +554,15 @@ async function startMentorSession(event) {
     });
     if (pendingTemplateFile) {
       try {
-        await api.uploadTemplate(base.id, pendingTemplateFile);
+        if (/\.pdf$/i.test(pendingTemplateFile.name)) {
+          const result = await api.uploadPdfTemplate(base.id, pendingTemplateFile);
+          showToast(
+            `PDF 模板已启用：识别 ${result.total_fields} 个可填字段，`
+            + `自动填充 ${result.matched_fields.length} 个；导出 PDF 将使用学校模板`,
+          );
+        } else {
+          await api.uploadTemplate(base.id, pendingTemplateFile);
+        }
       } catch (error) {
         showToast(error instanceof ApiError ? error.message : "学校模板上传失败，已使用系统模板");
       } finally {
@@ -2519,18 +2528,22 @@ function renderToolsTab() {
   root.append(photo);
 
   const template = element("section", "tool-card");
+  const hasPdfTemplate = Boolean(currentBase?.profile?.pdf_template);
   template.append(
     element("h3", "", "学校模板"),
     element("p", "", currentBase?.profile?.template
-      ? "已使用学校模板。可删除恢复系统版式。"
-      : "可上传学校的 HTML 简历模板；占位符：{{header}} {{education}} {{experience_work}} {{experience_projects}} {{skills}} {{summary}}。PDF 模板暂不支持自动填充，请先转为 HTML。"),
+      ? "已使用学校 HTML 模板。可删除恢复系统版式。"
+      : hasPdfTemplate
+        ? "已使用学校 PDF 模板：导出 PDF 时自动填充你的内容。可删除恢复系统版式。"
+        : "可上传学校的 HTML 模板，或带表单的 PDF 模板（自动识别可填写字段并填充）。"
+          + "HTML 占位符：{{header}} {{education}} {{experience_work}} {{experience_projects}} {{skills}} {{summary}}。"),
   );
   const templateActions = element("div", "tool-actions");
   const templateInput = document.createElement("input");
   templateInput.type = "file";
-  templateInput.accept = ".html,.htm";
+  templateInput.accept = ".html,.htm,.pdf";
   templateInput.hidden = true;
-  const templateUpload = element("button", "primary", "上传 HTML 模板");
+  const templateUpload = element("button", "primary", "上传 HTML / PDF 模板");
   templateUpload.type = "button";
   templateUpload.disabled = !currentBase;
   templateUpload.addEventListener("click", () => templateInput.click());
@@ -2540,27 +2553,39 @@ function renderToolsTab() {
     templateUpload.disabled = true;
     templateUpload.textContent = "正在上传…";
     try {
-      const base = await api.uploadTemplate(currentBase.id, file);
-      replaceBase(base);
-      await renderDocument();
-      showToast("学校模板已启用");
+      if (/\.pdf$/i.test(file.name)) {
+        const result = await api.uploadPdfTemplate(currentBase.id, file);
+        replaceBase(result.base);
+        await renderDocument();
+        showToast(
+          `PDF 模板已启用：识别 ${result.total_fields} 个可填字段，`
+          + `自动填充 ${result.matched_fields.length} 个；导出 PDF 将使用学校模板`,
+        );
+      } else {
+        const base = await api.uploadTemplate(currentBase.id, file);
+        replaceBase(base);
+        await renderDocument();
+        showToast("学校 HTML 模板已启用");
+      }
       renderToolsTab();
     } catch (error) {
       showToast(error instanceof ApiError ? error.message : "模板上传失败");
       templateUpload.disabled = false;
-      templateUpload.textContent = "上传 HTML 模板";
+      templateUpload.textContent = "上传 HTML / PDF 模板";
     } finally {
       templateInput.value = "";
     }
   });
   const templateRemove = element("button", "text-button", "恢复系统版式");
   templateRemove.type = "button";
-  templateRemove.hidden = !currentBase?.profile?.template;
+  templateRemove.hidden = !currentBase?.profile?.template && !hasPdfTemplate;
   templateRemove.addEventListener("click", async () => {
     if (!currentBase) return;
     templateRemove.disabled = true;
     try {
-      const base = await api.deleteTemplate(currentBase.id);
+      let base;
+      if (hasPdfTemplate) base = await api.deletePdfTemplate(currentBase.id);
+      else base = await api.deleteTemplate(currentBase.id);
       replaceBase(base);
       await renderDocument();
       showToast("已恢复系统版式");

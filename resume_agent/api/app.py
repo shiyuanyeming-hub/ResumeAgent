@@ -38,6 +38,11 @@ from resume_agent.api.schemas import (
 )
 from resume_agent.application.fact_base_service import FactBaseService
 from resume_agent.application.mentor_guide import MentorGuideService
+from resume_agent.application.pdf_template_service import (
+    MAX_PDF_TEMPLATE_BYTES,
+    analyze_and_fill,
+    has_form_fields,
+)
 from resume_agent.application.interview_service import (
     InterviewService,
     InterviewTurn,
@@ -513,6 +518,59 @@ def create_app(
             container.template_store.delete(base.profile.template)
         return container.fact_bases.clear_template(fact_base_id)
 
+    @app.put("/fact-bases/{fact_base_id}/pdf-template", tags=["fact-bases"])
+    async def upload_pdf_template(
+        fact_base_id: UUID,
+        template: UploadFile = File(...),
+    ):
+        data = await template.read()
+        if len(data) > MAX_PDF_TEMPLATE_BYTES:
+            raise HTTPException(status_code=413, detail="PDF 模板不能超过 10MB")
+        if not data.startswith(b"%PDF-"):
+            raise HTTPException(status_code=415, detail="请上传 PDF 格式的模板")
+        base = container.fact_bases.get(fact_base_id)
+        version = _current_version(fact_base_id)
+        selected_summary = version.selected_summary if version else ""
+        if not has_form_fields(data):
+            raise HTTPException(
+                status_code=415,
+                detail="该 PDF 没有可填写的表单字段，无法自动填充；"
+                "请使用带表单的 PDF，或将其转为 HTML 模板上传",
+            )
+        result = analyze_and_fill(data, base, selected_summary)
+        filename = container.template_store.save_pdf(fact_base_id, data)
+        updated = container.fact_bases.set_pdf_template(fact_base_id, filename)
+        return {
+            "base": updated,
+            "total_fields": result["total_fields"],
+            "matched_fields": result["matched_fields"],
+            "unfilled_keys": result["unfilled_keys"],
+        }
+
+    @app.get("/fact-bases/{fact_base_id}/pdf-template", tags=["fact-bases"])
+    def get_pdf_template(fact_base_id: UUID) -> Response:
+        base = container.fact_bases.get(fact_base_id)
+        if not base.profile.pdf_template:
+            raise HTTPException(status_code=404, detail="尚未上传 PDF 模板")
+        raw = container.template_store.load_pdf(base.profile.pdf_template)
+        if raw is None:
+            raise HTTPException(status_code=404, detail="PDF 模板文件不存在")
+        version = _current_version(fact_base_id)
+        selected_summary = version.selected_summary if version else ""
+        result = analyze_and_fill(raw, base, selected_summary)
+        return Response(content=result["filled_pdf"], media_type="application/pdf")
+
+    @app.delete(
+        "/fact-bases/{fact_base_id}/pdf-template",
+        response_model=CareerFactBase,
+        tags=["fact-bases"],
+    )
+    def delete_pdf_template(fact_base_id: UUID) -> CareerFactBase:
+        base = container.fact_bases.get(fact_base_id)
+        if base.profile.pdf_template:
+            container.template_store.delete(base.profile.pdf_template)
+        return container.fact_bases.clear_pdf_template(fact_base_id)
+
     @app.post(
         "/fact-bases",
         response_model=CareerFactBase,
@@ -764,6 +822,24 @@ def create_app(
         tags=["rendering"],
     )
     def export_version(version_id: UUID, format: RenderFormat) -> Response:
+        if format is RenderFormat.PDF:
+            version = container.version_repository.get(version_id)
+            base = container.fact_base_repository.get(version.fact_base_id)
+            if base.profile.pdf_template:
+                raw = container.template_store.load_pdf(base.profile.pdf_template)
+                if raw is not None:
+                    result = analyze_and_fill(raw, base, version.selected_summary)
+                    encoded_filename = quote(f"{version.name or '简历'}.pdf")
+                    return Response(
+                        content=result["filled_pdf"],
+                        media_type="application/pdf",
+                        headers={
+                            "Content-Disposition": (
+                                'attachment; filename="resume.pdf"; '
+                                f"filename*=UTF-8''{encoded_filename}"
+                            ),
+                        },
+                    )
         exported = container.rendering.export(version_id, format)
         ascii_filename = f"resume_{format.value}.{format.value}"
         encoded_filename = quote(exported.filename)

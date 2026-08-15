@@ -166,6 +166,7 @@ class CandidateProfile(BaseModel):
     language_scores: List[str] = Field(default_factory=list)
     photo: str = ""
     template: str = ""
+    pdf_template: str = ""
 
 
 class FactProposal(BaseModel):

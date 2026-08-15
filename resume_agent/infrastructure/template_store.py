@@ -25,3 +25,15 @@ class TemplateStore:
 
     def delete(self, filename: str) -> None:
         (self.root / filename).unlink(missing_ok=True)
+
+    def save_pdf(self, fact_base_id: UUID, data: bytes) -> str:
+        self.root.mkdir(parents=True, exist_ok=True)
+        filename = f"{fact_base_id}.pdf"
+        (self.root / filename).write_bytes(data)
+        return filename
+
+    def load_pdf(self, filename: str) -> Optional[bytes]:
+        path = self.root / filename
+        if not path.is_file():
+            return None
+        return path.read_bytes()

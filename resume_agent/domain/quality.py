@@ -66,7 +66,11 @@ def evaluate_profile_completeness(
             evaluate_experience(experience).passes_gate
             for experience in base.experiences
         ),
-        "skills": bool(base.profile.skills),
+        "skills": bool(
+            base.profile.skills
+            or base.profile.certificates
+            or base.profile.language_scores
+        ),
         "summary": bool(selected_summary),
     }
     return ProfileCompleteness(sections=sections, complete=all(sections.values()))

@@ -106,7 +106,7 @@ class ExperienceOptionsPayload(BaseModel):
     options: List[ExperienceOptionPayload] = Field(min_length=1, max_length=6)
 
 
-EXPERIENCE_OPTIONS_PROMPT = """你是简历导师。给定目标岗位，生成 4~6 个候选「经历/项目类型」选项（中文短标签，如「产品实习」「用户调研项目」「数据分析项目」「校园活动」），帮助用户选出自己做过的事情。每个选项标注 type，只能取：internship（实习）、work（工作）、project（项目）、campus（校园）。只输出 JSON：{"options": [{"label": "...", "type": "internship"}, ...]}"""
+EXPERIENCE_OPTIONS_PROMPT = """你是简历导师。给定目标岗位，生成 4~6 个候选「经历/项目类型」选项（中文短标签），帮助用户选出自己做过的事情。必须覆盖：岗位相关实习/工作，以及互联网类项目（如「Web 开发项目」「Agent / AI 开发项目」「小程序项目」「开源项目」「课程项目」等）。每个选项标注 type，只能取：internship（实习）、work（工作）、project（项目）、campus（校园）。只输出 JSON：{"options": [{"label": "...", "type": "internship"}, ...]}"""
 
 
 class FollowUpOptionsPayload(BaseModel):

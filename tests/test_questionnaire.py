@@ -98,6 +98,8 @@ def test_engine_summary_card_reads_version_options():
         FactValue(text="被团队采用", confidence=ConfidenceStatus.CONFIRMED)
     ]
     base.profile.skills = ["SQL"]
+    base.profile.certificates = ["CET-6 550"]
+    base.profile.language_scores = ["雅思 7.0"]
     state = QuestionnaireState(fact_base_id=base.id)
     state.completed_sections = ["education", "experience"]
     version = ResumeVersion(
@@ -128,6 +130,8 @@ def test_engine_summary_card_hidden_after_answer():
         FactValue(text="被团队采用", confidence=ConfidenceStatus.CONFIRMED)
     ]
     base.profile.skills = ["SQL"]
+    base.profile.certificates = ["CET-6 550"]
+    base.profile.language_scores = ["雅思 7.0"]
     state = QuestionnaireState(fact_base_id=base.id)
     state.completed_sections = ["education", "experience"]
     state.answered = ["summary:pick"]

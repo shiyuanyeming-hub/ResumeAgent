@@ -898,7 +898,9 @@ function renderQuestionCard(card) {
       form.append(field);
       readValue = () => ({ value: field.readValue().trim() });
     } else {
-      const isMultiline = card.step_id.includes("links");
+      const isMultiline = card.step_id.includes("links")
+        || card.step_id.includes("certs")
+        || card.step_id.includes("languages");
       const input = document.createElement(isMultiline ? "textarea" : "input");
       input.value = card.value || "";
       if (isMultiline) input.rows = 3;

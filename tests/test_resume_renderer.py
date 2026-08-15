@@ -184,8 +184,8 @@ def test_zh_groups_experiences_by_type():
     version = make_version(base, [first, second], locale="zh")
     rendered = ResumeRenderer().render(base, version)
     assert "## 实习/工作经历" in rendered.markdown
-    assert "## 校园及项目经历" in rendered.markdown
-    assert "校园及项目经历" in rendered.html
+    assert "## 项目经历" in rendered.markdown
+    assert "项目经历" in rendered.html
 
 
 def test_zh_skills_section_uses_profile_skills():
@@ -241,6 +241,6 @@ def test_zh_custom_snippets_render_and_drop_zone_exists():
     assert 'data-section="custom"' in rendered.html
     version.custom_sections = [VersionSnippet(text="一段自由补充内容")]
     rendered = ResumeRenderer().render(base, version)
-    assert "## 自定义片段" in rendered.markdown
+    assert "## 技能与证书" in rendered.markdown
     assert "一段自由补充内容" in rendered.markdown
     assert rendered.custom_snippets[0].text == "一段自由补充内容"

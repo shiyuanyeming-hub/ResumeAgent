@@ -38,8 +38,8 @@ COPY = {
         "title": "简历",
         "education": "教育背景",
         "internshipWork": "实习/工作经历",
-        "campusProjects": "校园及项目经历",
-        "skills": "技能",
+        "campusProjects": "项目经历",
+        "skills": "技能与证书",
         "courses": "核心课程",
         "summary": "职业概述",
         "target": "求职意向",
@@ -113,6 +113,8 @@ class ResumeRenderer:
             educations,
             version,
             photo_data_uri,
+            list(base.profile.certificates),
+            list(base.profile.language_scores),
         )
         rendered_html = self._html(
             version.locale,
@@ -126,6 +128,8 @@ class ResumeRenderer:
             educations,
             version,
             photo_data_uri,
+            list(base.profile.certificates),
+            list(base.profile.language_scores),
         )
         return RenderedResume(
             version_id=version.id,
@@ -333,7 +337,8 @@ class ResumeRenderer:
         return work, campus
 
     def _zh_markdown(self, candidate_name, headline, contact_line, summary,
-                     experiences, skills, educations, version, photo_data_uri=""):
+                     experiences, skills, educations, version, photo_data_uri="",
+                     certificates=(), language_scores=()):
         copy = COPY["zh"]
         lines = [f"# {self._markdown_escape(candidate_name)}", ""]
         if photo_data_uri:
@@ -344,11 +349,6 @@ class ResumeRenderer:
             lines.append("")
         if contact_line:
             lines.append(self._markdown_escape(contact_line))
-            lines.append("")
-        if version.selected_summary:
-            lines.append(f"## {copy['selfSummary']}")
-            lines.append("")
-            lines.append(self._markdown_escape(version.selected_summary))
             lines.append("")
         if educations:
             lines.append(f"## {copy['education']}")
@@ -394,22 +394,29 @@ class ResumeRenderer:
                 lines.append("")
                 lines.extend(f"- {self._markdown_escape(item)}" for item in experience.bullets)
                 lines.append("")
-        if skills:
+        # 技能与证书：技能标签 + 证书荣誉 + 语言成绩 + 自定义条目
+        skill_lines = [
+            " · ".join(self._markdown_escape(item) for item in skills),
+            *[f"- {self._markdown_escape(item)}" for item in certificates],
+            *[f"- {self._markdown_escape(item)}" for item in language_scores],
+            *[f"- {self._markdown_escape(item.text)}" for item in version.custom_sections],
+        ]
+        skill_lines = [line for line in skill_lines if line.strip()]
+        if skill_lines:
             lines.append(f"## {copy['skills']}")
             lines.append("")
-            lines.append(" · ".join(self._markdown_escape(item) for item in skills))
+            lines.extend(skill_lines)
             lines.append("")
-        if version.custom_sections:
-            lines.append("## 自定义片段")
+        if version.selected_summary:
+            lines.append(f"## {copy['selfSummary']}")
             lines.append("")
-            lines.extend(
-                f"- {self._markdown_escape(item.text)}" for item in version.custom_sections
-            )
+            lines.append(self._markdown_escape(version.selected_summary))
             lines.append("")
         return "\n".join(lines).strip() + "\n"
 
     def _zh_html(self, theme, candidate_name, headline, contact_line,
-                 experiences, skills, educations, version, photo_data_uri=""):
+                 experiences, skills, educations, version, photo_data_uri="",
+                 certificates=(), language_scores=()):
         copy = COPY["zh"]
         escape = lambda value: html.escape(value, quote=True)
         css = f"""
@@ -432,7 +439,7 @@ class ResumeRenderer:
         .skill {{ display:inline-block; background:var(--tint); border:.5pt solid var(--border); border-radius:2.5mm; padding:.5mm 2.2mm; margin:.5mm; color:var(--accent); font-size:9pt; }}
         .drop-zone {{ border-radius:3mm; transition: outline .1s; }}
         .drop-zone.drop-active {{ outline: 2.2pt dashed var(--accent); outline-offset: 2mm; }}
-        .snippet-remove {{ border: none; background: transparent; color: #9aa3ad; cursor: pointer; margin-left: 1mm; font-size: 8.5pt; }}
+        .drop-hint {{ color:#9aa3ad; font-size:8.5pt; margin:.8mm 0; }}
         """
         contact = f'<p class="contact">{escape(contact_line)}</p>' if contact_line else ""
         photo_html = (
@@ -445,10 +452,6 @@ class ResumeRenderer:
             f"{contact}</div>"
         )
         header_html = f"<header>{header_text}{photo_html}</header>"
-        summary_section = (
-            f"<h2>{copy['selfSummary']}</h2><p>{escape(version.selected_summary)}</p>"
-            if version.selected_summary else ""
-        )
         education_html = []
         for education in educations:
             meta = " · ".join(
@@ -502,24 +505,33 @@ class ResumeRenderer:
         education_section = (
             f"<h2>{copy['education']}</h2>{''.join(education_html)}" if educations else ""
         )
+        # 技能与证书：技能标签 + 证书荣誉 + 语言成绩 + 自定义条目（唯一可拖放的自定义区）
+        extra_items = "".join(
+            f"<li>{escape(item)}</li>"
+            for item in [*certificates, *language_scores]
+        )
         custom_items = "".join(
             f'<li class="snippet" data-snippet-id="{item.id}">{escape(item.text)}</li>'
             for item in version.custom_sections
         )
-        custom_drop = (
-            '<section class="drop-zone custom-snippets" data-section="custom">'
-            '<h2>自定义片段</h2>'
-            + (f"<ul>{custom_items}</ul>" if custom_items
-               else '<p class="meta">可把个人技能、性格等片段卡拖到此处。</p>')
-            + "</section>"
+        skills_certs = (
+            '<section class="drop-zone skills-certs" data-section="custom">'
+            f"<h2>{copy['skills']}</h2>"
+            f"{'<div>' + skills_html + '</div>' if skills else ''}"
+            f"{'<ul>' + extra_items + custom_items + '</ul>' if (extra_items or custom_items) else ''}"
+            '<p class="meta drop-hint">可把证书、语言成绩、奖学金等片段卡拖到此处。</p>'
+            "</section>"
+        )
+        summary_section = (
+            f"<h2>{copy['selfSummary']}</h2><p>{escape(version.selected_summary)}</p>"
+            if version.selected_summary else ""
         )
         body = (
             f"{header_html}"
-            f"{summary_section}"
             f"{education_section}"
             f"{''.join(groups_html)}"
-            f"{skills_section}"
-            f"{custom_drop}"
+            f"{skills_certs}"
+            f"{summary_section}"
         )
         return (
             "<!DOCTYPE html>\n"
@@ -541,12 +553,15 @@ class ResumeRenderer:
         educations: list[RenderedEducation],
         version: ResumeVersion,
         photo_data_uri: str = "",
+        certificates: list[str] = (),
+        language_scores: list[str] = (),
     ) -> str:
         copy = COPY[locale]
         if locale == "zh":
             return self._zh_markdown(
                 candidate_name, headline, contact_line, summary,
                 experiences, skills, educations, version, photo_data_uri,
+                certificates, language_scores,
             )
         lines = [f"# {self._markdown_escape(candidate_name)}", ""]
         if headline:
@@ -588,6 +603,8 @@ class ResumeRenderer:
         educations,
         version,
         photo_data_uri: str = "",
+        certificates: list[str] = (),
+        language_scores: list[str] = (),
     ) -> str:
         copy = COPY[locale]
         escape = lambda value: html.escape(value, quote=True)
@@ -629,6 +646,7 @@ class ResumeRenderer:
             return self._zh_html(
                 theme, candidate_name, headline, contact_line,
                 experiences, skills, educations, version, photo_data_uri,
+                certificates, language_scores,
             )
         body = (
             f'<header><h1>{escape(candidate_name)}</h1>'

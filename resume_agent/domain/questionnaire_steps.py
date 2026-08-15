@@ -6,8 +6,8 @@ SECTION_LABELS = {
     "profile": "基本信息",
     "target": "求职意向",
     "education": "教育背景",
-    "experience": "经历",
-    "skills": "技能",
+    "experience": "实习与项目经历",
+    "skills": "技能证书",
     "summary": "自我评价",
 }
 

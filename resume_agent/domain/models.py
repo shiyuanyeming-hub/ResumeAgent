@@ -162,6 +162,8 @@ class CandidateProfile(BaseModel):
     location: str = ""
     links: List[str] = Field(default_factory=list)
     skills: List[str] = Field(default_factory=list)
+    certificates: List[str] = Field(default_factory=list)
+    language_scores: List[str] = Field(default_factory=list)
     photo: str = ""
 
 

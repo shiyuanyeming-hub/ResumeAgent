@@ -31,9 +31,13 @@ class FailingAdvisor:
         raise RuntimeError("boom")
 
 
-def test_offline_experience_options_map_four_types():
+def test_offline_experience_options_cover_types_and_projects():
     options = offline_experience_options()
-    assert [item["type"] for item in options] == ["internship", "work", "project", "campus"]
+    types = [item["type"] for item in options]
+    assert "internship" in types and "work" in types and "campus" in types
+    assert types.count("project") >= 3  # Web/Agent/课程项目
+    labels = [item["label"] for item in options]
+    assert "Web 开发项目" in labels and "Agent / AI 项目" in labels
 
 
 def test_offline_followup_options_cover_dimensions():
@@ -49,7 +53,8 @@ def test_guide_analyze_job_offline_and_advisor():
 
 def test_guide_experience_options_offline_and_advisor():
     offline = MentorGuideService().experience_options("产品经理")
-    assert [item["label"] for item in offline] == ["实习", "工作", "项目", "校园经历"]
+    labels = [item["label"] for item in offline]
+    assert "实习" in labels and "Web 开发项目" in labels
     service = MentorGuideService(experience_advisor=FakeExperienceAdvisor())
     assert service.experience_options("产品经理")[0]["label"] == "产品实习"
 
@@ -68,5 +73,5 @@ def test_guide_falls_back_when_advisor_fails():
         followup_advisor=FailingAdvisor(),
     )
     assert len(service.analyze_job("产品经理")) >= 3
-    assert len(service.experience_options("产品经理")) == 4
+    assert len(service.experience_options("产品经理")) == 6
     assert service.followup_options("产品经理", "星河科技 · 实习生", "action")

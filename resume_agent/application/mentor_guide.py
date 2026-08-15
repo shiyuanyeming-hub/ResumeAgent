@@ -1,7 +1,5 @@
 """Mentor-guide candidates: job analysis and dynamic answer options."""
 
-from resume_agent.domain.questionnaire_steps import EXPERIENCE_TYPE_OPTIONS
-
 OFFLINE_JOB_ANALYSIS = [
     "与目标岗位相关的项目或实习经历",
     "可量化的成果与数据",
@@ -20,12 +18,19 @@ OFFLINE_FOLLOWUP_OPTIONS = {
 }
 
 
+OFFLINE_EXPERIENCE_OPTIONS = [
+    {"label": "实习", "type": "internship"},
+    {"label": "工作", "type": "work"},
+    {"label": "Web 开发项目", "type": "project"},
+    {"label": "Agent / AI 项目", "type": "project"},
+    {"label": "课程项目", "type": "project"},
+    {"label": "校园经历", "type": "campus"},
+]
+
+
 def offline_experience_options():
-    """固定四类经历选项（离线兜底，label 映射到类型）。"""
-    return [
-        {"label": label, "type": code}
-        for code, label in EXPERIENCE_TYPE_OPTIONS
-    ]
+    """离线兜底：实习/工作 + 互联网类项目（Web、Agent 等）。"""
+    return [dict(item) for item in OFFLINE_EXPERIENCE_OPTIONS]
 
 
 class MentorGuideService:

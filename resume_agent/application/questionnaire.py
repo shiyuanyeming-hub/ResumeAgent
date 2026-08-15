@@ -308,14 +308,26 @@ class QuestionnaireEngine:
         return list(OFFLINE_FOLLOWUP_OPTIONS.get("role", []))
 
     def _skills_card(self, base, state):
-        if base.profile.skills or self._skipped(state, "skills:tags"):
-            return None
-        return self._card(
-            "skills:tags", "skills", QuestionKind.MULTI_CHOICE,
-            "勾选或添加你的技能标签（可跳过）",
-            options=list(state.skill_options),
-            values=list(base.profile.skills),
-        )
+        if not base.profile.skills and not self._skipped(state, "skills:tags"):
+            return self._card(
+                "skills:tags", "skills", QuestionKind.MULTI_CHOICE,
+                "勾选或添加你的技能标签（可跳过）",
+                options=list(state.skill_options),
+                values=list(base.profile.skills),
+            )
+        if not base.profile.certificates and not self._skipped(state, "skills:certs"):
+            return self._card(
+                "skills:certs", "skills", QuestionKind.TEXT,
+                "证书、奖学金与荣誉（可跳过，每行一条，如 CET-6 550、国家奖学金）",
+                skippable=True,
+            )
+        if not base.profile.language_scores and not self._skipped(state, "skills:languages"):
+            return self._card(
+                "skills:languages", "skills", QuestionKind.TEXT,
+                "语言成绩（可跳过，每行一条，如 雅思 7.0、托福 100、日语 N1）",
+                skippable=True,
+            )
+        return None
 
     def _summary_card(self, state, version):
         if (
@@ -471,8 +483,12 @@ class QuestionnaireService:
             return self._answer_experience(base, state, step_id, value, extra)
         if step_id == "skills:tags":
             return self._answer_skills(base, values)
+        if step_id == "skills:certs":
+            return self._answer_skills_text(base, "certificates", value)
+        if step_id == "skills:languages":
+            return self._answer_skills_text(base, "language_scores", value)
         if step_id == "summary:pick":
-            return base  # 自我评价写入在 Task 15 实现
+            return base  # 自我评价写入在 API 层完成
         raise ValueError(f"unknown questionnaire step: {step_id}")
 
     def _answer_profile(self, base, step_id, value):
@@ -629,6 +645,11 @@ class QuestionnaireService:
 
     def _answer_skills(self, base, values):
         base.profile.skills = [item.strip() for item in values if item.strip()]
+        return self._bump(base)
+
+    def _answer_skills_text(self, base, field, value):
+        lines = [line.strip() for line in value.splitlines() if line.strip()]
+        setattr(base.profile, field, lines)
         return self._bump(base)
 
     def _course_options(self, major):

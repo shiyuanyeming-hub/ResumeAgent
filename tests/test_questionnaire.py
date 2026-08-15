@@ -421,7 +421,41 @@ def test_engine_role_card_offline_options_without_guide():
     card = engine.next_card(base, state)
     assert card.step_id == f"experience:{experience.id}:role"
     assert card.kind is QuestionKind.CHOICE_FREE
-    assert card.options == ["项目负责人", "核心成员", "普通成员", "实习生"]
+    assert card.skippable is True  # 岗位可跳过
+    # 工作经历 → 正式岗位选项
+    assert card.options == ["产品经理", "运营专员", "数据分析师", "项目经理", "市场专员"]
+
+
+def test_project_experience_asks_name_only_without_role():
+    base = make_base()
+    experience = Experience(
+        organization="", role="", type=ExperienceType.PROJECT,
+    )
+    base.experiences.append(experience)
+    state = QuestionnaireState(fact_base_id=base.id)
+    state.skipped = ["education:add"]
+    card = engine.next_card(base, state)
+    assert card.step_id == f"experience:{experience.id}:organization"
+    assert "项目" in card.prompt
+    # 填完项目名后直接问时间，不再问岗位
+    state.answered = [f"experience:{experience.id}:organization"]
+    experience.organization = "全国商赛项目"
+    card = engine.next_card(base, state)
+    assert card.step_id == f"experience:{experience.id}:period"
+
+
+def test_internship_role_options_differ_by_type():
+    base = make_base()
+    experience = Experience(
+        organization="某互联网公司", role="", type=ExperienceType.INTERNSHIP,
+    )
+    base.experiences.append(experience)
+    state = QuestionnaireState(fact_base_id=base.id)
+    state.skipped = ["education:add"]
+    card = engine.next_card(base, state)
+    assert card.step_id == f"experience:{experience.id}:role"
+    assert "产品实习生" in card.options
+    assert "数据分析实习生" in card.options
 
 
 def test_engine_role_card_uses_guide_role_options():

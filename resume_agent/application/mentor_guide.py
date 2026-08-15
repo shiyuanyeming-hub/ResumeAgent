@@ -17,6 +17,12 @@ OFFLINE_FOLLOWUP_OPTIONS = {
     "evidence": ["有数字指标", "有交付物", "有他人反馈", "暂时没有"],
 }
 
+# 按经历类型区分的岗位选项离线兜底（LLM 失败时使用）
+OFFLINE_ROLE_OPTIONS_BY_TYPE = {
+    "internship": ["产品实习生", "运营实习生", "数据分析实习生", "市场实习生", "技术实习生"],
+    "work": ["产品经理", "运营专员", "数据分析师", "项目经理", "市场专员"],
+}
+
 
 OFFLINE_EXPERIENCE_OPTIONS = [
     {"label": "实习", "type": "internship"},

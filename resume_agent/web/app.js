@@ -2397,7 +2397,7 @@ function renderToolsTab() {
     element("h3", "", "学校模板"),
     element("p", "", currentBase?.profile?.template
       ? "已使用学校模板。可删除恢复系统版式。"
-      : "可上传学校的 HTML 简历模板；占位符：{{header}} {{education}} {{experience_work}} {{experience_projects}} {{skills}} {{summary}}。"),
+      : "可上传学校的 HTML 简历模板；占位符：{{header}} {{education}} {{experience_work}} {{experience_projects}} {{skills}} {{summary}}。PDF 模板暂不支持自动填充，请先转为 HTML。"),
   );
   const templateActions = element("div", "tool-actions");
   const templateInput = document.createElement("input");

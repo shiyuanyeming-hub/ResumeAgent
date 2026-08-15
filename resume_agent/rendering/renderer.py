@@ -389,7 +389,10 @@ class ResumeRenderer:
             lines.append(f"## {heading}")
             lines.append("")
             for experience in group:
-                experience_heading = f"{experience.role} — {experience.organization}"
+                experience_heading = (
+                    f"{experience.role} — {experience.organization}"
+                    if experience.role else experience.organization
+                )
                 if experience.period:
                     experience_heading += f" | {experience.period}"
                 lines.append(f"### {self._markdown_escape(experience_heading)}")
@@ -497,16 +500,21 @@ class ResumeRenderer:
                 continue
             section_html = []
             for experience in group:
-                meta = " · ".join(
-                    item for item in (experience.organization, experience.period) if item
-                )
+                if experience.role:
+                    title = escape(experience.role)
+                    meta = " · ".join(
+                        item for item in (experience.organization, experience.period) if item
+                    )
+                else:
+                    title = escape(experience.organization)
+                    meta = escape(experience.period)
                 bullets = "".join(
                     f"<li>{escape(item)}</li>" for item in experience.bullets
                 )
                 section_html.append(
                     f'<section class="experience" data-experience-id="{experience.id}">'
-                    f"<h3>{escape(experience.role)}</h3>"
-                    f'<p class="meta">{escape(meta)}</p>'
+                    f"<h3>{title}</h3>"
+                    f'{f"<p class=\"meta\">{meta}</p>" if meta else ""}'
                     f"{'<ul>' + bullets + '</ul>' if bullets else ''}</section>"
                 )
             group_fragments[key] = f"<h2>{heading}</h2>{''.join(section_html)}"

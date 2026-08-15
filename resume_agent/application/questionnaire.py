@@ -35,7 +35,10 @@ from resume_agent.domain.questionnaire_steps import (
     TARGET_STEPS,
 )
 from resume_agent.domain.year_month import is_year_month, year_month_le
-from resume_agent.application.mentor_guide import OFFLINE_FOLLOWUP_OPTIONS
+from resume_agent.application.mentor_guide import (
+    OFFLINE_FOLLOWUP_OPTIONS,
+    OFFLINE_ROLE_OPTIONS_BY_TYPE,
+)
 
 
 class QuestionKind(str, Enum):
@@ -264,17 +267,34 @@ class QuestionnaireEngine:
         )
 
     def _experience_field_card(self, base, state, experience):
+        # 名称：实习/工作问公司，项目问项目名，校园问经历名
         if not experience.organization and not self._skipped(state, f"experience:{experience.id}:organization"):
+            prompts = {
+                ExperienceType.PROJECT: "这个项目的名称是？",
+                ExperienceType.CAMPUS: "这段校园经历的名称是？",
+            }
+            prompt = prompts.get(
+                experience.type,
+                "这段实习/工作的公司名称是？（必填）",
+            )
             return self._card(
                 f"experience:{experience.id}:organization", "experience",
-                QuestionKind.TEXT, "这段经历的公司、组织或项目名称是？", skippable=False,
+                QuestionKind.TEXT, prompt, skippable=False,
             )
-        if not experience.role and not self._skipped(state, f"experience:{experience.id}:role"):
+        # 岗位：仅实习/工作询问（可跳过），且选项按经历类型动态生成
+        asks_role = experience.type in (
+            ExperienceType.INTERNSHIP, ExperienceType.WORK,
+        )
+        if (
+            asks_role
+            and not experience.role
+            and not self._skipped(state, f"experience:{experience.id}:role")
+        ):
             return self._card(
                 f"experience:{experience.id}:role", "experience",
-                QuestionKind.CHOICE_FREE, "你当时担任的角色是？（点选或自己填写）",
+                QuestionKind.CHOICE_FREE, "你当时担任的岗位是？（可跳过）",
                 options=self._role_options(base, experience),
-                skippable=False,
+                skippable=True,
             )
         if not experience.start and not self._skipped(state, f"experience:{experience.id}:period"):
             return self._card(
@@ -296,16 +316,23 @@ class QuestionnaireEngine:
         return None
 
     def _role_options(self, base, experience):
-        """角色候选：优先 LLM 动态生成（结合岗位与经历类型），失败走离线模板。"""
+        """岗位候选：按经历类型（实习/工作）动态生成，失败走分类型离线模板。"""
+        type_labels = {
+            ExperienceType.INTERNSHIP: "实习",
+            ExperienceType.WORK: "工作",
+        }
+        type_label = type_labels.get(experience.type, "实习")
         if self.guide is not None:
             options = self.guide.followup_options(
                 base.target.role or "",
-                f"{experience.organization or experience.type.value} · 担任角色",
+                f"{type_label}经历 · {experience.organization or type_label} · 担任岗位",
                 "role",
             )
             if options:
                 return options
-        return list(OFFLINE_FOLLOWUP_OPTIONS.get("role", []))
+        return list(
+            OFFLINE_ROLE_OPTIONS_BY_TYPE.get(experience.type.value, [])
+        ) or list(OFFLINE_FOLLOWUP_OPTIONS.get("role", []))
 
     def _skills_card(self, base, state):
         if not base.profile.skills and not self._skipped(state, "skills:tags"):

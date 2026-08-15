@@ -708,3 +708,64 @@ def test_skip_new_degree_returns_to_education_more():
     state.skipped = ["education:new:degree"]
     card = engine.next_card(base, state)
     assert card.step_id == "education:more"
+
+
+def test_skip_education_more_completes_education_section():
+    questionnaire, base = make_service()
+    for step_id, value in [
+        ("profile:name", "王明"),
+        ("profile:email", "wang@example.com"),
+        ("profile:phone", "13800000000"),
+        ("target:role", "数据分析师"),
+    ]:
+        questionnaire.answer(base.id, step_id, value=value)
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.answer(base.id, "education:add", value="本科")
+    questionnaire.answer(base.id, "education:new:school", value="某大学")
+    loaded = questionnaire.fact_bases.get(base.id)
+    education_id = loaded.educations[0].id
+    questionnaire.answer(base.id, f"education:{education_id}:major", value="统计")
+    questionnaire.answer(
+        base.id, f"education:{education_id}:period",
+        extra={"start": "2020-09", "end": "2024-06"},
+    )
+    for field in ("gpa", "rank", "research", "thesis", "courses"):
+        questionnaire.skip(base.id, f"education:{education_id}:{field}")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "education:more"
+    # 跳过「是否还有上一段学历」= 没有更多了
+    questionnaire.skip(base.id, "education:more")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "experience:add"
+
+
+def test_skip_experience_more_completes_experience_section():
+    questionnaire, base = make_service()
+    for step_id, value in [
+        ("profile:name", "王明"),
+        ("profile:email", "wang@example.com"),
+        ("profile:phone", "13800000000"),
+        ("target:role", "数据分析师"),
+    ]:
+        questionnaire.answer(base.id, step_id, value=value)
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    questionnaire.answer(base.id, "experience:add", value="实习")
+    loaded = questionnaire.fact_bases.get(base.id)
+    experience_id = loaded.experiences[0].id
+    questionnaire.answer(base.id, f"experience:{experience_id}:organization", value="星河科技")
+    questionnaire.answer(base.id, f"experience:{experience_id}:role", value="实习生")
+    questionnaire.answer(
+        base.id, f"experience:{experience_id}:period",
+        extra={"start": "2024-06", "end": ""},
+    )
+    questionnaire.skip(base.id, f"experience:{experience_id}:interview")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "experience:more"
+    questionnaire.skip(base.id, "experience:more")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "skills:tags"

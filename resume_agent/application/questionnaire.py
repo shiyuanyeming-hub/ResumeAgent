@@ -507,6 +507,11 @@ class QuestionnaireService:
         state = self._state(fact_base_id)
         if step_id not in state.skipped:
             state.skipped.append(step_id)
+        # 「是否还有下一段」类卡片跳过 = 没有更多了 → 结束该章节
+        if step_id == "education:more" and "education" not in state.completed_sections:
+            state.completed_sections.append("education")
+        if step_id == "experience:more" and "experience" not in state.completed_sections:
+            state.completed_sections.append("experience")
         state.updated_at = utc_now()
         self.repository.save(state)
         return self.next_card(fact_base_id)

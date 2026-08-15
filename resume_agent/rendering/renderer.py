@@ -450,9 +450,6 @@ class ResumeRenderer:
         li {{ margin:.8mm 0; }}
         li::marker {{ color:var(--accent); }}
         .skill {{ display:inline-block; background:var(--tint); border:.6pt solid var(--border); border-radius:3mm; padding:.6mm 2.6mm; margin:.6mm .6mm 0 0; color:var(--accent); font-size:8.6pt; letter-spacing:.3px; }}
-        .drop-zone {{ border-radius:2mm; transition: outline .1s; }}
-        .drop-zone.drop-active {{ outline: 2pt dashed var(--accent); outline-offset: 1.5mm; }}
-        .drop-hint {{ color:#9aa3ad; font-size:8pt; margin:.8mm 0; }}
         """
         contact_items = "".join(
             f"<li>{escape(item.strip())}</li>"
@@ -543,21 +540,19 @@ class ResumeRenderer:
         education_section = (
             f"<h2>{copy['education']}</h2>{''.join(education_html)}" if educations else ""
         )
-        # 技能与证书：技能标签 + 证书荣誉 + 语言成绩 + 自定义条目（唯一可拖放的自定义区）
+        # 技能与证书：技能标签 + 证书荣誉 + 语言成绩 + 历史自定义条目
         extra_items = "".join(
             f"<li>{escape(item)}</li>"
             for item in [*certificates, *language_scores]
         )
         custom_items = "".join(
-            f'<li class="snippet" data-snippet-id="{item.id}">{escape(item.text)}</li>'
-            for item in version.custom_sections
+            f"<li>{escape(item.text)}</li>" for item in version.custom_sections
         )
         skills_certs = (
-            '<section class="drop-zone skills-certs" data-section="custom">'
+            '<section class="skills-certs">'
             f"<h2>{copy['skills']}</h2>"
             f"{'<div>' + skills_html + '</div>' if skills else ''}"
             f"{'<ul>' + extra_items + custom_items + '</ul>' if (extra_items or custom_items) else ''}"
-            '<p class="meta drop-hint">可把证书、语言成绩、奖学金等片段卡拖到此处。</p>'
             "</section>"
         )
         summary_section = (

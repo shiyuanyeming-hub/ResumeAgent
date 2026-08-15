@@ -369,11 +369,6 @@ dialog p { color: var(--muted); line-height: 1.6; }
 .year-month-range { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .year-month-fallback { display: inline-flex; gap: 4px; }
 
-.snippet-cards { margin-top: 10px; border-top: 1px dashed var(--border, #d8dde5); padding-top: 10px; }
-.snippet-cards h4 { margin: 0 0 4px; }
-.snippet-card { border: 1px solid var(--border, #d8dde5); border-radius: 8px; padding: 8px 10px; margin: 8px 0; background: #f8fafc; cursor: grab; }
-.snippet-card:hover { border-color: var(--accent, #1d4ed8); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-.snippet-card p { margin: 0; }
 
 .language-choices { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; max-width: 360px; }
 .language-choice { padding: 12px 16px; font-size: 15px; }
@@ -406,3 +401,122 @@ dialog p { color: var(--muted); line-height: 1.6; }
 .facts-toolbar { margin-bottom: 10px; }
 .experience-card-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .danger-text { color: #b91c1c; }
+
+/* ============ 视觉设计升级（纯样式，不改逻辑） ============ */
+
+body {
+  background:
+    radial-gradient(1100px 500px at 8% -10%, rgba(31, 78, 121, 0.10), transparent 60%),
+    radial-gradient(900px 420px at 100% 0%, rgba(217, 119, 6, 0.07), transparent 55%),
+    var(--background);
+}
+
+.app-header {
+  background: linear-gradient(120deg, #16324d 0%, var(--accent) 55%, #2b6a9e 100%);
+  border-bottom: 0;
+  box-shadow: 0 2px 14px rgba(15, 23, 42, 0.18);
+  position: relative;
+  z-index: 10;
+}
+.app-header .brand { color: #fff; font-weight: 700; letter-spacing: 0.3px; }
+.app-header .brand-mark { filter: drop-shadow(0 0 6px rgba(255, 193, 7, 0.65)); }
+.app-header .product-note, .app-header .service-status { color: rgba(255, 255, 255, 0.78); }
+.app-header button, .app-header select {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+.app-header button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.22); border-color: rgba(255, 255, 255, 0.55); color: #fff; }
+.app-header select option { color: var(--ink); }
+.app-header .status-dot { background: rgba(255, 255, 255, 0.4); }
+.app-header .service-status.ready .status-dot { background: #5eead4; animation: status-pulse 2.2s ease-in-out infinite; }
+.app-header .service-status.offline .status-dot { background: #fbbf24; }
+@keyframes status-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(94, 234, 212, 0.5); } 50% { box-shadow: 0 0 0 5px rgba(94, 234, 212, 0); } }
+
+.panel { border-radius: 14px; box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08); }
+
+.primary-tabs { background: #fbfcfe; }
+.primary-tabs button { border-radius: 10px 10px 0 0; margin: 6px 3px 0; padding: 10px 14px 8px; }
+.primary-tabs button:hover:not([aria-selected="true"]) { color: var(--accent); }
+.primary-tabs button[aria-selected="true"] {
+  background: linear-gradient(180deg, var(--accent-soft), #fff);
+  border-bottom: 3px solid var(--accent);
+  border-radius: 10px 10px 0 0;
+  color: var(--accent);
+}
+.primary-tabs button::before { margin-right: 6px; }
+.primary-tabs button[data-tab="chat"]::before { content: "💬"; }
+.primary-tabs button[data-tab="facts"]::before { content: "📋"; }
+.primary-tabs button[data-tab="jd"]::before { content: "📄"; }
+.primary-tabs button[data-tab="tools"]::before { content: "🛠️"; }
+
+button.primary {
+  background: linear-gradient(135deg, var(--accent), #2b6a9e);
+  box-shadow: 0 2px 8px rgba(31, 78, 121, 0.35);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+button.primary:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(31, 78, 121, 0.45);
+  color: #fff;
+  transform: translateY(-1px);
+}
+button:active:not(:disabled) { transform: translateY(0); }
+
+.section-chip { cursor: pointer; transition: transform 120ms ease, box-shadow 120ms ease; }
+.section-chip:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); }
+
+.question-dialog { animation: dialog-in 180ms ease; }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+.question-card { border-left: 4px solid var(--accent, #1d4ed8); box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06); }
+
+.experience-card, .tool-card, .version-card, .profile-details {
+  border-left: 3px solid var(--accent, #1d4ed8);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  transition: box-shadow 140ms ease, transform 140ms ease;
+}
+.experience-card:hover, .tool-card:hover, .version-card:hover { box-shadow: 0 6px 16px rgba(15, 23, 42, 0.1); }
+
+.language-choice {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  transition: transform 130ms ease, box-shadow 130ms ease;
+}
+.language-choice:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12); }
+.language-choice.primary {
+  background: linear-gradient(135deg, var(--accent), #2b6a9e);
+  border-left-color: #0d2436;
+}
+
+.interview-progress { background: linear-gradient(180deg, #f3f7fb, #fff); }
+.progress-track span.complete { background: linear-gradient(90deg, var(--accent), #2b6a9e); }
+
+.chat-composer textarea:focus, .form-field input:focus, .chip-free-row input:focus,
+.question-card-form input:focus, .question-card-form textarea:focus {
+  outline: 2px solid rgba(31, 78, 121, 0.35);
+  outline-offset: 0;
+  border-color: var(--accent, #1d4ed8);
+}
+
+.toast {
+  background: linear-gradient(135deg, #172033, #233a57);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.35);
+  border-radius: 999px;
+}
+
+.panel-content::-webkit-scrollbar, .chat-messages::-webkit-scrollbar,
+.preview-surface::-webkit-scrollbar { width: 8px; }
+.panel-content::-webkit-scrollbar-thumb, .preview-surface::-webkit-scrollbar-thumb {
+  background: #c3cdd9; border-radius: 8px;
+}
+.panel-content::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+.paper-placeholder {
+  background: linear-gradient(180deg, #fff, #fbfcfe);
+  border-radius: 4px;
+}
+
+#preview-frame { border-radius: 4px; }

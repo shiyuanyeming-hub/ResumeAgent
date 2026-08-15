@@ -59,5 +59,6 @@ def test_styles_define_required_breakpoints_without_ai_effects(tmp_path):
     assert "flex-wrap: wrap" in css
     assert "@media (max-width: 640px)" in css
     assert "[hidden] { display: none !important; }" in css
-    assert "linear-gradient" not in css
+    # 视觉设计升级：允许基于主题色板的渐变，但仍不使用 backdrop-filter 等重效果
+    assert "linear-gradient" in css
     assert "backdrop-filter" not in css

@@ -149,6 +149,10 @@ export function createApi(fetchImpl = globalThis.fetch) {
     experienceQuality: (factBaseId, experienceId) => request(
       `/fact-bases/${factBaseId}/experiences/${experienceId}/quality`,
     ),
+    updateExperience: (factBaseId, experienceId, payload) => request(
+      `/fact-bases/${factBaseId}/experiences/${experienceId}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    ),
     questionnaire: (factBaseId) => request(`/fact-bases/${factBaseId}/questionnaire`),
     searchSchools: (query) => request(
       `/schools/search?q=${encodeURIComponent(query)}&limit=8`,
@@ -289,18 +293,6 @@ export function createApi(fetchImpl = globalThis.fetch) {
     setVersionSummary: (versionId, text) => request(
       `/versions/${versionId}/summary`,
       { method: "PUT", body: JSON.stringify({ text }) },
-    ),
-    generateSnippets: (factBaseId, experienceId) => request(
-      `/fact-bases/${factBaseId}/experiences/${experienceId}/snippets/generate`,
-      { method: "POST" },
-    ),
-    addVersionSnippet: (versionId, payload) => request(
-      `/versions/${versionId}/snippets`,
-      { method: "POST", body: JSON.stringify(payload) },
-    ),
-    deleteVersionSnippet: (versionId, snippetId) => request(
-      `/versions/${versionId}/snippets/${snippetId}`,
-      { method: "DELETE" },
     ),
   };
 }

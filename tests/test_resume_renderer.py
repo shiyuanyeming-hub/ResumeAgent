@@ -238,7 +238,6 @@ def test_zh_custom_snippets_render_and_drop_zone_exists():
     base, first, _ = evidence_fixture()
     version = make_version(base, [first], locale="zh")
     rendered = ResumeRenderer().render(base, version)
-    assert 'data-section="custom"' in rendered.html
     version.custom_sections = [VersionSnippet(text="一段自由补充内容")]
     rendered = ResumeRenderer().render(base, version)
     assert "## 技能与证书" in rendered.markdown

@@ -3,11 +3,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# 先装依赖，利用构建缓存
+# 先拷贝源码再安装（pip install . 需要包文件在场）
 COPY pyproject.toml README.md ./
-RUN pip install --no-cache-dir '.[agents]'
-
 COPY resume_agent ./resume_agent
+RUN pip install --no-cache-dir '.[agents]'
 
 EXPOSE 8000
 

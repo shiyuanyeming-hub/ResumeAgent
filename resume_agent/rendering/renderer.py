@@ -426,40 +426,61 @@ class ResumeRenderer:
         escape = lambda value: html.escape(value, quote=True)
         css = f"""
         :root {{--accent:{theme.accent};--secondary:{theme.secondary};--tint:{theme.tint};--border:{theme.border};}}
-        @page {{ size: A4; margin: 17mm 20mm; }}
+        @page {{ size: A4; margin: 12mm 12mm; }}
         * {{ box-sizing: border-box; }}
-        body {{ font-family:{theme.font_family}; color:#1f2937; font-size:10pt; line-height:1.66; margin:0; }}
-        header {{ border-bottom:2.5pt solid var(--accent); padding-bottom:4mm; margin-bottom:6mm; display:flex; justify-content:space-between; gap:6mm; align-items:center; }}
-        .header-text {{ flex:1; }}
-        h1 {{ color:var(--accent); font-size:22pt; margin:0 0 1mm; letter-spacing:1px; }}
-        .headline {{ color:var(--secondary); font-size:10.8pt; margin:0 0 1.2mm; letter-spacing:.3px; }}
-        .contact {{ color:#5f6772; font-size:9.2pt; margin:0; }}
-        .photo {{ width:28mm; height:36mm; object-fit:cover; border-radius:2mm; border:.5pt solid var(--border); }}
-        h2 {{ color:var(--accent); font-size:12pt; letter-spacing:.6px; border-left:4pt solid var(--accent); padding-left:3mm; margin:6.5mm 0 2.8mm; }}
-        h3 {{ font-size:10.8pt; margin:0 0 .5mm; color:#20252b; }}
+        body {{ font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif; color:#2a3442; font-size:9.6pt; line-height:1.62; margin:0; }}
+        .sheet {{ display:flex; min-height:273mm; border-radius:2mm; overflow:hidden; box-shadow:0 0 0 .5pt var(--border); }}
+        .sidebar {{ width:58mm; flex:none; background:var(--accent); color:#fff; padding:9mm 5mm 8mm; }}
+        .sidebar .photo {{ width:30mm; height:38mm; object-fit:cover; border-radius:2mm; border:2pt solid rgba(255,255,255,.55); display:block; margin:0 auto 6mm; }}
+        .side-title {{ color:#fff; font-size:10pt; letter-spacing:1.5px; margin:5mm 0 2mm; padding-bottom:1.4mm; border-bottom:1pt solid rgba(255,255,255,.35); }}
+        .side-list {{ list-style:none; padding:0; margin:0; font-size:8.4pt; color:rgba(255,255,255,.93); }}
+        .side-list li {{ margin:.9mm 0; word-break:break-all; }}
+        .content {{ flex:1; padding:8mm 7mm 8mm 8mm; }}
+        header {{ margin-bottom:6mm; padding-bottom:3.2mm; border-bottom:2.5pt solid var(--accent); }}
+        h1 {{ color:var(--accent); font-size:22pt; margin:0 0 1.6mm; letter-spacing:1.5px; }}
+        .headline {{ color:var(--secondary); font-size:11pt; margin:0; letter-spacing:.6px; }}
+        h2 {{ color:var(--accent); font-size:12pt; letter-spacing:1px; margin:6mm 0 2.8mm; padding-bottom:1.5mm; border-bottom:1.2pt solid var(--tint); position:relative; }}
+        h2::before {{ content:""; position:absolute; left:0; bottom:-1.2pt; width:13mm; height:2.4pt; background:var(--accent); }}
+        h3 {{ font-size:10.6pt; margin:0 0 .5mm; color:#1f2937; }}
         p {{ margin:1mm 0; }}
-        .meta {{ color:#5f6772; font-size:9pt; margin:.6mm 0; }}
-        ul {{ margin:1.2mm 0 2.4mm; padding-left:5.5mm; }}
-        li {{ margin:.9mm 0; padding-left:.6mm; }}
+        .meta {{ color:#67727f; font-size:8.7pt; margin:.5mm 0; }}
+        section.education, section.experience {{ position:relative; padding-left:4.5mm; margin:0 0 3mm; border-left:1pt solid var(--tint); }}
+        section.education::before, section.experience::before {{ content:""; position:absolute; left:-2.1pt; top:1.4mm; width:3.2pt; height:3.2pt; border-radius:50%; background:var(--accent); }}
+        ul {{ margin:1mm 0 2mm; padding-left:4.5mm; }}
+        li {{ margin:.8mm 0; }}
         li::marker {{ color:var(--accent); }}
-        section.education {{ margin:0 0 3mm; }}
-        section.experience {{ margin:0 0 2.8mm; }}
-        .skill {{ display:inline-block; background:var(--tint); border:.6pt solid var(--border); border-radius:3mm; padding:.6mm 2.8mm; margin:.6mm .6mm 0 0; color:var(--accent); font-size:9pt; letter-spacing:.3px; }}
-        .drop-zone {{ border-radius:3mm; transition: outline .1s; }}
-        .drop-zone.drop-active {{ outline: 2.2pt dashed var(--accent); outline-offset: 2mm; }}
-        .drop-hint {{ color:#9aa3ad; font-size:8.5pt; margin:.8mm 0; }}
+        .skill {{ display:inline-block; background:var(--tint); border:.6pt solid var(--border); border-radius:3mm; padding:.6mm 2.6mm; margin:.6mm .6mm 0 0; color:var(--accent); font-size:8.6pt; letter-spacing:.3px; }}
+        .drop-zone {{ border-radius:2mm; transition: outline .1s; }}
+        .drop-zone.drop-active {{ outline: 2pt dashed var(--accent); outline-offset: 1.5mm; }}
+        .drop-hint {{ color:#9aa3ad; font-size:8pt; margin:.8mm 0; }}
         """
-        contact = f'<p class="contact">{escape(contact_line)}</p>' if contact_line else ""
+        contact_items = "".join(
+            f"<li>{escape(item.strip())}</li>"
+            for item in contact_line.split(" · ")
+            if item.strip()
+        )
         photo_html = (
             f'<img class="photo" src="{photo_data_uri}" alt="照片" />'
             if photo_data_uri else ""
         )
-        header_text = (
-            f'<div class="header-text"><h1>{escape(candidate_name)}</h1>'
-            f'<p class="headline">{copy["target"]}：{escape(headline)}</p>'
-            f"{contact}</div>"
+        cert_items = "".join(
+            f"<li>{escape(item)}</li>"
+            for item in [*certificates, *language_scores]
         )
-        header_html = f"<header>{header_text}{photo_html}</header>"
+        sidebar = (
+            '<aside class="sidebar">'
+            f"{photo_html}"
+            '<h3 class="side-title">联系方式</h3>'
+            f"{'<ul class=\"side-list\">' + contact_items + '</ul>' if contact_items else ''}"
+            f"{'<h3 class=\"side-title\">证书与语言</h3><ul class=\"side-list\">' + cert_items + '</ul>' if cert_items else ''}"
+            "</aside>"
+        )
+        header_html = (
+            "<header>"
+            f"<h1>{escape(candidate_name)}</h1>"
+            f'<p class="headline">{copy["target"]}：{escape(headline)}</p>'
+            "</header>"
+        )
         education_html = []
         for education in educations:
             meta = " · ".join(
@@ -544,12 +565,14 @@ class ResumeRenderer:
             if version.selected_summary else ""
         )
         body = (
-            f"{header_html}"
+            f'<div class="sheet">{sidebar}'
+            f'<div class="content">{header_html}'
             f"{education_section}"
             f"{group_fragments['work']}"
             f"{group_fragments['projects']}"
             f"{skills_certs}"
             f"{summary_section}"
+            "</div></div>"
         )
         if template_html:
             return self._zh_template(
@@ -561,7 +584,7 @@ class ResumeRenderer:
             f'<html lang="zh"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{escape(copy["title"])}</title><style>{css}</style></head>'
-            f'<body data-template-version="2">{body}</body></html>'
+            f'<body data-template-version="3">{body}</body></html>'
         )
 
     @staticmethod

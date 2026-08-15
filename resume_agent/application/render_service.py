@@ -54,7 +54,7 @@ class ResumeRenderService:
             base, version, photo_data_uri=photo_data_uri, template_html=template_html
         )
         warnings = list(rendered.warnings)
-        if version.manual_html and 'data-template-version' not in version.manual_html:
+        if version.manual_html and 'data-template-version="3"' not in version.manual_html:
             from resume_agent.rendering.models import RenderWarning
             warnings.append(RenderWarning(
                 code="stale_template",

@@ -174,6 +174,27 @@ export function createApi(fetchImpl = globalThis.fetch) {
     deletePhoto: (factBaseId) => request(`/fact-bases/${factBaseId}/photo`, {
       method: "DELETE",
     }),
+    templateUrl: (factBaseId) => `/fact-bases/${factBaseId}/template`,
+    uploadTemplate: async (factBaseId, file) => {
+      const body = new FormData();
+      body.append("template", file);
+      const response = await fetch(`/fact-bases/${factBaseId}/template`, {
+        method: "PUT",
+        body,
+      });
+      if (!response.ok) {
+        let message = "模板上传失败";
+        try {
+          const payload = await response.json();
+          if (payload?.detail) message = String(payload.detail);
+        } catch { /* keep default message */ }
+        throw new ApiError(response.status, errorCategory(response.status), message);
+      }
+      return response.json();
+    },
+    deleteTemplate: (factBaseId) => request(`/fact-bases/${factBaseId}/template`, {
+      method: "DELETE",
+    }),
     answerQuestion: (factBaseId, payload) => request(
       `/fact-bases/${factBaseId}/questionnaire/answer`,
       { method: "POST", body: JSON.stringify(payload) },

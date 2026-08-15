@@ -30,12 +30,14 @@ class ResumeRenderService:
         renderer: ResumeRenderer,
         exporter: ResumeExporter,
         photo_loader: Optional[Callable[[str], Optional[bytes]]] = None,
+        template_loader: Optional[Callable[[str], Optional[str]]] = None,
     ) -> None:
         self.fact_bases = fact_bases
         self.versions = versions
         self.renderer = renderer
         self.exporter = exporter
         self.photo_loader = photo_loader
+        self.template_loader = template_loader
 
     def preview(self, version_id: UUID) -> RenderedResume:
         version = self.versions.get(version_id)
@@ -45,7 +47,12 @@ class ResumeRenderService:
             data = self.photo_loader(base.profile.photo)
             if data:
                 photo_data_uri = data_uri_for(base.profile.photo, data)
-        rendered = self.renderer.render(base, version, photo_data_uri=photo_data_uri)
+        template_html = ""
+        if base.profile.template and self.template_loader is not None:
+            template_html = self.template_loader(base.profile.template) or ""
+        rendered = self.renderer.render(
+            base, version, photo_data_uri=photo_data_uri, template_html=template_html
+        )
         warnings = list(rendered.warnings)
         if version.manual_html and 'data-template-version' not in version.manual_html:
             from resume_agent.rendering.models import RenderWarning

@@ -463,6 +463,8 @@ function renderOnboarding(bootFailed = false) {
   byId("chat-composer").hidden = true;
 }
 
+let pendingTemplateFile = null;
+
 async function chooseLanguage(locale) {
   if (locale !== "zh") {
     showToast("日文与英文向导即将支持，敬请期待");
@@ -470,6 +472,49 @@ async function chooseLanguage(locale) {
   }
   state.locale = "zh";
   saveState();
+  showTemplateChoice();
+}
+
+function showTemplateChoice() {
+  pendingTemplateFile = null;
+  const panel = byId("chat-panel");
+  panel.replaceChildren();
+  const heading = element("div", "section-heading");
+  heading.append(
+    element("h2", "", "选择简历版式"),
+    element("p", "", "可以使用系统模板，也可以上传你学校的简历模板（HTML）。之后在「工具」页随时可换。"),
+  );
+  const choices = element("div", "language-choices");
+  const system = element("button", "primary language-choice", "使用系统模板（推荐）");
+  system.type = "button";
+  system.addEventListener("click", showRoleForm);
+  const upload = element("button", "language-choice", "上传学校模板（HTML）");
+  upload.type = "button";
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = ".html,.htm";
+  fileInput.hidden = true;
+  upload.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    if (!/\.html?$/i.test(file.name)) {
+      showToast("请选择 HTML 格式的模板文件");
+      return;
+    }
+    pendingTemplateFile = file;
+    showRoleForm();
+  });
+  choices.append(system, upload, fileInput);
+  const hint = element(
+    "p", "quality-caption",
+    "模板占位符（可选）：{{header}} {{education}} {{experience_work}} {{experience_projects}} {{skills}} {{summary}}；没有占位符时退回系统版式。",
+  );
+  panel.append(heading, choices, hint);
+  byId("chat-composer").hidden = true;
+}
+
+function showRoleForm() {
   const panel = byId("chat-panel");
   panel.replaceChildren();
   const heading = element("div", "section-heading");
@@ -477,6 +522,9 @@ async function chooseLanguage(locale) {
     element("h2", "", "你想应聘什么岗位？"),
     element("p", "", "导师会根据这个岗位，一步步问你、帮你把简历问出来。"),
   );
+  if (pendingTemplateFile) {
+    heading.append(element("p", "quality-caption", `已选择学校模板：${pendingTemplateFile.name}`));
+  }
   const form = element("form", "onboarding-form");
   form.id = "onboarding-form";
   form.append(field("目标岗位", "role", "例如：产品经理"));
@@ -503,6 +551,15 @@ async function startMentorSession(event) {
       country: "",
       languages: ["zh", "ja", "en"],
     });
+    if (pendingTemplateFile) {
+      try {
+        await api.uploadTemplate(base.id, pendingTemplateFile);
+      } catch (error) {
+        showToast(error instanceof ApiError ? error.message : "学校模板上传失败，已使用系统模板");
+      } finally {
+        pendingTemplateFile = null;
+      }
+    }
     await activateBase(base);
     if (currentBase?.id === base.id && versions.length === 0) {
       const version = await api.createVersion(base.id, {
@@ -2334,6 +2391,62 @@ function renderToolsTab() {
   photoActions.append(fileInput, uploadButton, removeButton);
   photo.append(photoActions, photoPreview);
   root.append(photo);
+
+  const template = element("section", "tool-card");
+  template.append(
+    element("h3", "", "学校模板"),
+    element("p", "", currentBase?.profile?.template
+      ? "已使用学校模板。可删除恢复系统版式。"
+      : "可上传学校的 HTML 简历模板；占位符：{{header}} {{education}} {{experience_work}} {{experience_projects}} {{skills}} {{summary}}。"),
+  );
+  const templateActions = element("div", "tool-actions");
+  const templateInput = document.createElement("input");
+  templateInput.type = "file";
+  templateInput.accept = ".html,.htm";
+  templateInput.hidden = true;
+  const templateUpload = element("button", "primary", "上传 HTML 模板");
+  templateUpload.type = "button";
+  templateUpload.disabled = !currentBase;
+  templateUpload.addEventListener("click", () => templateInput.click());
+  templateInput.addEventListener("change", async () => {
+    const file = templateInput.files?.[0];
+    if (!file || !currentBase) return;
+    templateUpload.disabled = true;
+    templateUpload.textContent = "正在上传…";
+    try {
+      const base = await api.uploadTemplate(currentBase.id, file);
+      replaceBase(base);
+      await renderDocument();
+      showToast("学校模板已启用");
+      renderToolsTab();
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "模板上传失败");
+      templateUpload.disabled = false;
+      templateUpload.textContent = "上传 HTML 模板";
+    } finally {
+      templateInput.value = "";
+    }
+  });
+  const templateRemove = element("button", "text-button", "恢复系统版式");
+  templateRemove.type = "button";
+  templateRemove.hidden = !currentBase?.profile?.template;
+  templateRemove.addEventListener("click", async () => {
+    if (!currentBase) return;
+    templateRemove.disabled = true;
+    try {
+      const base = await api.deleteTemplate(currentBase.id);
+      replaceBase(base);
+      await renderDocument();
+      showToast("已恢复系统版式");
+      renderToolsTab();
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : "恢复失败");
+      templateRemove.disabled = false;
+    }
+  });
+  templateActions.append(templateInput, templateUpload, templateRemove);
+  template.append(templateActions);
+  root.append(template);
 
   const exports = element("section", "tool-card");
   exports.append(element("h3", "", "当前版本导出"));

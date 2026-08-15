@@ -71,6 +71,7 @@ class ResumeRenderer:
         base: CareerFactBase,
         version: ResumeVersion,
         photo_data_uri: str = "",
+        template_html: str = "",
     ) -> RenderedResume:
         if base.id != version.fact_base_id:
             raise ValueError("version does not belong to fact base")
@@ -130,6 +131,7 @@ class ResumeRenderer:
             photo_data_uri,
             list(base.profile.certificates),
             list(base.profile.language_scores),
+            template_html,
         )
         return RenderedResume(
             version_id=version.id,
@@ -416,7 +418,7 @@ class ResumeRenderer:
 
     def _zh_html(self, theme, candidate_name, headline, contact_line,
                  experiences, skills, educations, version, photo_data_uri="",
-                 certificates=(), language_scores=()):
+                 certificates=(), language_scores=(), template_html=""):
         copy = COPY["zh"]
         escape = lambda value: html.escape(value, quote=True)
         css = f"""
@@ -437,9 +439,7 @@ class ResumeRenderer:
         ul {{ margin:1.2mm 0 2.4mm; padding-left:5.5mm; }}
         li {{ margin:.9mm 0; padding-left:.6mm; }}
         li::marker {{ color:var(--accent); }}
-        section.education {{ display:flex; gap:3.5mm; align-items:flex-start; margin:0 0 3mm; }}
-        .edu-badge {{ width:10mm; height:10mm; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:10.5pt; font-weight:600; flex:none; margin-top:.4mm; box-shadow:0 0 0 1.5mm var(--tint); }}
-        .edu-body {{ flex:1; }}
+        section.education {{ margin:0 0 3mm; }}
         section.experience {{ margin:0 0 2.8mm; }}
         .skill {{ display:inline-block; background:var(--tint); border:.6pt solid var(--border); border-radius:3mm; padding:.6mm 2.8mm; margin:.6mm .6mm 0 0; color:var(--accent); font-size:9pt; letter-spacing:.3px; }}
         .drop-zone {{ border-radius:3mm; transition: outline .1s; }}
@@ -481,19 +481,19 @@ class ResumeRenderer:
                 + "</p>"
                 if education.courses else ""
             )
-            # 校徽式文字徽章：学校名称首字（真实校徽图片有版权，后续可支持上传替换）
-            badge_char = escape((education.school or "校")[:1])
             education_html.append(
                 f'<section class="education" data-school="{escape(education.school)}">'
-                f'<div class="edu-badge">{badge_char}</div>'
-                f'<div class="edu-body"><h3>{escape(education.school)}</h3>'
-                f'<p class="meta">{escape(meta)}</p>{detail_line}{courses}</div>'
-                f"</section>"
+                f"<h3>{escape(education.school)}</h3>"
+                f'<p class="meta">{escape(meta)}</p>{detail_line}{courses}</section>'
             )
         work, campus = self._zh_group(experiences)
-        groups_html = []
-        for heading, group in ((copy["internshipWork"], work), (copy["campusProjects"], campus)):
+        group_fragments = {}
+        for key, heading, group in (
+            ("work", copy["internshipWork"], work),
+            ("projects", copy["campusProjects"], campus),
+        ):
             if not group:
+                group_fragments[key] = ""
                 continue
             section_html = []
             for experience in group:
@@ -509,9 +509,8 @@ class ResumeRenderer:
                     f'<p class="meta">{escape(meta)}</p>'
                     f"{'<ul>' + bullets + '</ul>' if bullets else ''}</section>"
                 )
-            groups_html.append(f"<h2>{heading}</h2>{''.join(section_html)}")
+            group_fragments[key] = f"<h2>{heading}</h2>{''.join(section_html)}"
         skills_html = "".join(f'<span class="skill">{escape(item)}</span>' for item in skills)
-        skills_section = f"<h2>{copy['skills']}</h2><div>{skills_html}</div>" if skills else ""
         education_section = (
             f"<h2>{copy['education']}</h2>{''.join(education_html)}" if educations else ""
         )
@@ -539,10 +538,16 @@ class ResumeRenderer:
         body = (
             f"{header_html}"
             f"{education_section}"
-            f"{''.join(groups_html)}"
+            f"{group_fragments['work']}"
+            f"{group_fragments['projects']}"
             f"{skills_certs}"
             f"{summary_section}"
         )
+        if template_html:
+            return self._zh_template(
+                template_html, body, header_html, education_section,
+                group_fragments, skills_certs, summary_section,
+            )
         return (
             "<!DOCTYPE html>\n"
             f'<html lang="zh"><head><meta charset="utf-8">'
@@ -550,6 +555,33 @@ class ResumeRenderer:
             f'<title>{escape(copy["title"])}</title><style>{css}</style></head>'
             f'<body data-template-version="2">{body}</body></html>'
         )
+
+    @staticmethod
+    def _zh_template(template_html, full_body, header_html, education_section,
+                     group_fragments, skills_certs, summary_section):
+        """把系统生成的片段注入用户上传的学校模板（占位符约定见工具页说明）。"""
+        import re
+
+        replacements = {
+            "{{full_content}}": full_body,
+            "{{header}}": header_html,
+            "{{education}}": education_section,
+            "{{experience_work}}": group_fragments["work"],
+            "{{experience_projects}}": group_fragments["projects"],
+            "{{skills}}": skills_certs,
+            "{{summary}}": summary_section,
+        }
+        filled = template_html
+        has_placeholder = False
+        for token, value in replacements.items():
+            if token in filled:
+                has_placeholder = True
+                filled = filled.replace(token, value)
+        if not has_placeholder:
+            # 模板没有任何占位符：退回系统版式，避免导出空白简历
+            return full_body
+        filled = re.sub(r"\{\{\s*[a-zA-Z_]+\s*\}\}", "", filled)
+        return filled
 
     def _markdown(
         self,
@@ -615,6 +647,7 @@ class ResumeRenderer:
         photo_data_uri: str = "",
         certificates: list[str] = (),
         language_scores: list[str] = (),
+        template_html: str = "",
     ) -> str:
         copy = COPY[locale]
         escape = lambda value: html.escape(value, quote=True)
@@ -656,7 +689,7 @@ class ResumeRenderer:
             return self._zh_html(
                 theme, candidate_name, headline, contact_line,
                 experiences, skills, educations, version, photo_data_uri,
-                certificates, language_scores,
+                certificates, language_scores, template_html,
             )
         body = (
             f'<header><h1>{escape(candidate_name)}</h1>'

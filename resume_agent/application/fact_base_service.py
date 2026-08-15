@@ -73,6 +73,24 @@ class FactBaseService:
         self.repository.save(base, expected_revision=expected_revision)
         return self.repository.get(base.id)
 
+    def set_template(self, fact_base_id: UUID, filename: str) -> CareerFactBase:
+        base = self.repository.get(fact_base_id)
+        expected_revision = base.revision
+        base.profile.template = filename
+        base.revision += 1
+        base.updated_at = utc_now()
+        self.repository.save(base, expected_revision=expected_revision)
+        return self.repository.get(base.id)
+
+    def clear_template(self, fact_base_id: UUID) -> CareerFactBase:
+        base = self.repository.get(fact_base_id)
+        expected_revision = base.revision
+        base.profile.template = ""
+        base.revision += 1
+        base.updated_at = utc_now()
+        self.repository.save(base, expected_revision=expected_revision)
+        return self.repository.get(base.id)
+
     def save(self, base: CareerFactBase, expected_revision: int) -> None:
         self.repository.save(base, expected_revision=expected_revision)
 

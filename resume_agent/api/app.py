@@ -71,6 +71,10 @@ from resume_agent.infrastructure.photo_store import (
     MAX_PHOTO_BYTES,
     PhotoStore,
 )
+from resume_agent.infrastructure.template_store import (
+    MAX_TEMPLATE_BYTES,
+    TemplateStore,
+)
 from resume_agent.infrastructure.sqlite_repositories import (
     SQLiteFactBaseRepository,
     SQLiteQuestionnaireRepository,
@@ -102,6 +106,7 @@ class ServiceContainer:
     snippet_agent: object
     capabilities: AgentCapabilityStatus
     photo_store: object
+    template_store: object
 
 
 def create_app(
@@ -125,6 +130,7 @@ def create_app(
     session_repository = SQLiteSessionRepository(store)
     version_repository = SQLiteVersionRepository(store)
     photo_store = PhotoStore(Path(database_path).resolve().parent / "photos")
+    template_store = TemplateStore(Path(database_path).resolve().parent / "templates")
     renderer = resume_renderer or ResumeRenderer()
     exporter = resume_exporter or ResumeExporter()
     if agent_capabilities is not None:
@@ -184,11 +190,13 @@ def create_app(
             renderer,
             exporter,
             photo_loader=photo_store.load,
+            template_loader=template_store.load,
         ),
         summaries=SummaryService(summary_agent),
         snippet_agent=snippet_agent,
         capabilities=capabilities,
         photo_store=photo_store,
+        template_store=template_store,
     )
     app = FastAPI(
         title="ResumeAgent API",
@@ -451,6 +459,48 @@ def create_app(
         if base.profile.photo:
             container.photo_store.delete(base.profile.photo)
         return container.fact_bases.clear_photo(fact_base_id)
+
+    @app.put(
+        "/fact-bases/{fact_base_id}/template",
+        response_model=CareerFactBase,
+        tags=["fact-bases"],
+    )
+    async def upload_template(
+        fact_base_id: UUID,
+        template: UploadFile = File(...),
+    ) -> CareerFactBase:
+        data = await template.read()
+        if len(data) > MAX_TEMPLATE_BYTES:
+            raise HTTPException(status_code=413, detail="模板不能超过 2MB")
+        try:
+            content = data.decode("utf-8")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=415, detail="仅支持 UTF-8 编码的 HTML 模板")
+        if "<html" not in content.lower() and "{{" not in content:
+            raise HTTPException(status_code=415, detail="模板必须是 HTML（可包含占位符）")
+        filename = container.template_store.save(fact_base_id, content)
+        return container.fact_bases.set_template(fact_base_id, filename)
+
+    @app.get("/fact-bases/{fact_base_id}/template", tags=["fact-bases"])
+    def get_template(fact_base_id: UUID) -> Response:
+        base = container.fact_bases.get(fact_base_id)
+        if not base.profile.template:
+            raise HTTPException(status_code=404, detail="尚未上传学校模板")
+        content = container.template_store.load(base.profile.template)
+        if content is None:
+            raise HTTPException(status_code=404, detail="模板文件不存在")
+        return Response(content=content, media_type="text/html")
+
+    @app.delete(
+        "/fact-bases/{fact_base_id}/template",
+        response_model=CareerFactBase,
+        tags=["fact-bases"],
+    )
+    def delete_template(fact_base_id: UUID) -> CareerFactBase:
+        base = container.fact_bases.get(fact_base_id)
+        if base.profile.template:
+            container.template_store.delete(base.profile.template)
+        return container.fact_bases.clear_template(fact_base_id)
 
     @app.post(
         "/fact-bases",

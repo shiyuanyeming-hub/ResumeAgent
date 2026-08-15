@@ -165,6 +165,7 @@ class CandidateProfile(BaseModel):
     certificates: List[str] = Field(default_factory=list)
     language_scores: List[str] = Field(default_factory=list)
     photo: str = ""
+    template: str = ""
 
 
 class FactProposal(BaseModel):

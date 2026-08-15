@@ -1062,6 +1062,15 @@ function renderQuestionCard(card) {
   const submit = element("button", "primary", "确定");
   submit.type = "submit";
   actions.append(submit);
+  if (card.deletable) {
+    const remove = element("button", "text-button danger-text", "选错了，删除这段经历");
+    remove.type = "button";
+    remove.addEventListener("click", () => {
+      const experienceId = String(card.step_id || "").split(":")[1];
+      confirmDeleteExperience(experienceId, true);
+    });
+    actions.append(remove);
+  }
   if (card.skippable) {
     const skip = element("button", "text-button", "跳过");
     skip.type = "button";
@@ -1888,16 +1897,17 @@ function showAddExperienceForm() {
   if (!dialog.open) dialog.showModal();
 }
 
-function confirmDeleteExperience(experienceId) {
+function confirmDeleteExperience(experienceId, reopenWizard = false) {
   if (!currentBase || !experienceId) return;
   const experience = currentBase.experiences.find((item) => item.id === experienceId);
   if (!experience) return;
   const dialog = byId("question-dialog");
   const body = byId("question-dialog-body");
   const article = element("article", "question-card");
+  const label = experience.organization || experience.role || "这段经历";
   article.append(element(
     "p", "question-prompt",
-    `删除整段经历「${experience.organization} · ${experience.role}」？删除后不可恢复。`,
+    `删除整段经历「${label}」？删除后不可恢复。`,
   ));
   const actions = element("div", "question-actions");
   const confirm = element("button", "danger", "删除这段经历");
@@ -1921,6 +1931,9 @@ function confirmDeleteExperience(experienceId) {
       renderJdTab();
       dialog.close();
       showToast("已删除这段经历");
+      if (reopenWizard) {
+        presentQuestionCard(questionnaireState?.next || null);
+      }
     } catch (error) {
       showToast(error instanceof ApiError ? error.message : "删除失败");
       confirm.disabled = false;

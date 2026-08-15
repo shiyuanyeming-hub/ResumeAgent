@@ -61,6 +61,7 @@ class QuestionCard(BaseModel):
     extra: Dict[str, str] = Field(default_factory=dict)
     skippable: bool = True
     regeneratable: bool = False
+    deletable: bool = False
 
 
 class SectionProgress(BaseModel):
@@ -146,22 +147,39 @@ class QuestionnaireEngine:
             if self._skipped(state, "education:add"):
                 return None
             if "education:add" in state.answered:
+                if self._skipped(state, "education:new:school"):
+                    # 用户放弃这一段学历：取消整段，进入下一章节
+                    state.pending_education_degree = ""
+                    if "education:add" not in state.skipped:
+                        state.skipped.append("education:add")
+                    return None
                 return self._pending_degree_school_card(state)
             return self._card(
                 "education:add", "education", QuestionKind.CHOICE,
                 "你目前的最高学历是？（会从最高学历开始自上而下逐段填写）",
-                options=list(FIRST_DEGREE_OPTIONS), skippable=False,
+                options=list(FIRST_DEGREE_OPTIONS), skippable=True,
             )
         if "education" in state.completed_sections:
             return None
         if state.pending_education_degree:
+            if self._skipped(state, "education:new:school"):
+                # 放弃上一段学历：回到学历层次选择（可跳过）
+                state.pending_education_degree = ""
+                return None
             return self._pending_degree_school_card(state)
         education = self._edited_education(base, state)
         if education is None:
+            if self._skipped(state, "education:new:degree"):
+                # 不再添加学历 → 回到「是否还有上一段学历」
+                return self._card(
+                    "education:more", "education", QuestionKind.CHOICE,
+                    "是否还有上一段学历要填写？（例如：本科）",
+                    options=["添加上一段学历", EDUCATION_DONE_OPTION],
+                )
             return self._card(
                 "education:new:degree", "education", QuestionKind.CHOICE,
                 "还有一段学历要填写，它的层次是？",
-                options=list(NEXT_DEGREE_OPTIONS), skippable=False,
+                options=list(NEXT_DEGREE_OPTIONS), skippable=True,
             )
         card = self._education_field_card(base, state, education)
         if card is not None:
@@ -177,7 +195,7 @@ class QuestionnaireEngine:
         prompt = f"你{degree}阶段的学校是？" if degree else "学校名称是？"
         return self._card(
             "education:new:school", "education", QuestionKind.TEXT,
-            prompt, skippable=False,
+            prompt, skippable=True,
         )
 
     def _education_field_card(self, base, state, education):
@@ -282,6 +300,7 @@ class QuestionnaireEngine:
             return self._card(
                 f"experience:{experience.id}:organization", "experience",
                 QuestionKind.TEXT, prompt, skippable=False,
+                deletable=True,  # 误选经历类型时可直接删除整段
             )
         # 岗位：仅实习/工作询问（可跳过），且选项按经历类型动态生成
         asks_role = experience.type in (

@@ -644,3 +644,67 @@ def test_regenerate_role_options_passes_previous():
     options = questionnaire.regenerate_options(base.id, f"experience:{experience_id}:role")
     assert calls[-1] == ["新岗位1"]
     assert options == ["新岗位2"]
+
+
+def test_experience_name_card_deletable_for_mispick():
+    base = make_base()
+    experience = Experience(organization="", role="", type=ExperienceType.PROJECT)
+    base.experiences.append(experience)
+    state = QuestionnaireState(fact_base_id=base.id)
+    state.skipped = ["education:add"]
+    card = engine.next_card(base, state)
+    assert card.step_id == f"experience:{experience.id}:organization"
+    assert card.deletable is True
+    assert card.skippable is False
+
+    experience.organization = "某项目"
+    card = engine.next_card(base, state)
+    assert card.step_id == f"experience:{experience.id}:period"
+    assert card.deletable is False
+
+
+def test_education_degree_card_skippable():
+    questionnaire, base = make_service()
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="数据分析师")
+    questionnaire.skip(base.id, "target:city")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "education:add"
+    assert card.skippable is True
+    questionnaire.skip(base.id, "education:add")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "experience:add"
+
+
+def test_skip_school_cancels_pending_education():
+    questionnaire, base = make_service()
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="数据分析师")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.answer(base.id, "education:add", value="硕士")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "education:new:school"
+    assert card.skippable is True
+    questionnaire.skip(base.id, "education:new:school")
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == "experience:add"
+
+
+def test_skip_new_degree_returns_to_education_more():
+    base = make_base()
+    base.educations.append(
+        Education(school="某大学", major="统计", degree="本科", start="2020-09")
+    )
+    state = QuestionnaireState(fact_base_id=base.id)
+    state.edited_education_id = None
+    state.skipped = ["education:new:degree"]
+    card = engine.next_card(base, state)
+    assert card.step_id == "education:more"

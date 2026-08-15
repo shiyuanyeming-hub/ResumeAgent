@@ -46,11 +46,19 @@ class ResumeRenderService:
             if data:
                 photo_data_uri = data_uri_for(base.profile.photo, data)
         rendered = self.renderer.render(base, version, photo_data_uri=photo_data_uri)
+        warnings = list(rendered.warnings)
+        if version.manual_html and 'data-template-version' not in version.manual_html:
+            from resume_agent.rendering.models import RenderWarning
+            warnings.append(RenderWarning(
+                code="stale_template",
+                message="排版模板已更新：点击「恢复自动生成」即可看到新版式（你填写的内容都在）。",
+            ))
         return rendered.model_copy(
             update={
                 "photo_data_uri": photo_data_uri,
                 "markdown": version.manual_markdown or rendered.markdown,
                 "html": version.manual_html or rendered.html,
+                "warnings": warnings,
             }
         )
 

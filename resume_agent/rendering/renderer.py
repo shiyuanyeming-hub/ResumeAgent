@@ -421,22 +421,27 @@ class ResumeRenderer:
         escape = lambda value: html.escape(value, quote=True)
         css = f"""
         :root {{--accent:{theme.accent};--secondary:{theme.secondary};--tint:{theme.tint};--border:{theme.border};}}
-        @page {{ size: A4; margin: 14mm 16mm; }}
+        @page {{ size: A4; margin: 15mm 18mm; }}
         * {{ box-sizing: border-box; }}
-        body {{ font-family:{theme.font_family}; color:#1f2937; font-size:10pt; line-height:1.58; margin:0; }}
-        header {{ border-bottom:2.2pt solid var(--accent); padding-bottom:3mm; margin-bottom:5mm; display:flex; justify-content:space-between; gap:5mm; align-items:center; }}
+        body {{ font-family:{theme.font_family}; color:#1f2937; font-size:10pt; line-height:1.66; margin:0; }}
+        header {{ border-bottom:2.5pt solid var(--accent); padding-bottom:4mm; margin-bottom:6mm; display:flex; justify-content:space-between; gap:6mm; align-items:center; }}
         .header-text {{ flex:1; }}
-        h1 {{ color:var(--accent); font-size:21pt; margin:0; letter-spacing:.4px; }}
-        .headline {{ color:var(--secondary); font-size:10.5pt; margin:1mm 0; }}
-        .contact,.meta {{ color:#5f6772; font-size:9pt; margin:.8mm 0; }}
-        .photo {{ width:26mm; height:34mm; object-fit:cover; border-radius:1.5mm; border:.4pt solid var(--border); }}
-        h2 {{ color:var(--accent); font-size:11.5pt; border-left:3.5pt solid var(--accent); padding-left:2.5mm; margin:5mm 0 2mm; }}
-        h3 {{ font-size:10.5pt; margin:2.5mm 0 .5mm; color:#20252b; }}
+        h1 {{ color:var(--accent); font-size:22pt; margin:0 0 1mm; letter-spacing:1px; }}
+        .headline {{ color:var(--secondary); font-size:10.8pt; margin:0 0 1.2mm; letter-spacing:.3px; }}
+        .contact {{ color:#5f6772; font-size:9.2pt; margin:0; }}
+        .photo {{ width:28mm; height:36mm; object-fit:cover; border-radius:2mm; border:.5pt solid var(--border); }}
+        h2 {{ color:var(--accent); font-size:12pt; letter-spacing:.6px; border-left:4pt solid var(--accent); padding-left:3mm; margin:6.5mm 0 2.8mm; }}
+        h3 {{ font-size:10.8pt; margin:0 0 .5mm; color:#20252b; }}
         p {{ margin:1mm 0; }}
-        ul {{ margin:1mm 0 2mm; padding-left:5mm; }}
-        li {{ margin:.7mm 0; }}
+        .meta {{ color:#5f6772; font-size:9pt; margin:.6mm 0; }}
+        ul {{ margin:1.2mm 0 2.4mm; padding-left:5.5mm; }}
+        li {{ margin:.9mm 0; padding-left:.6mm; }}
         li::marker {{ color:var(--accent); }}
-        .skill {{ display:inline-block; background:var(--tint); border:.5pt solid var(--border); border-radius:2.5mm; padding:.5mm 2.2mm; margin:.5mm; color:var(--accent); font-size:9pt; }}
+        section.education {{ display:flex; gap:3.5mm; align-items:flex-start; margin:0 0 3mm; }}
+        .edu-badge {{ width:10mm; height:10mm; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:10.5pt; font-weight:600; flex:none; margin-top:.4mm; box-shadow:0 0 0 1.5mm var(--tint); }}
+        .edu-body {{ flex:1; }}
+        section.experience {{ margin:0 0 2.8mm; }}
+        .skill {{ display:inline-block; background:var(--tint); border:.6pt solid var(--border); border-radius:3mm; padding:.6mm 2.8mm; margin:.6mm .6mm 0 0; color:var(--accent); font-size:9pt; letter-spacing:.3px; }}
         .drop-zone {{ border-radius:3mm; transition: outline .1s; }}
         .drop-zone.drop-active {{ outline: 2.2pt dashed var(--accent); outline-offset: 2mm; }}
         .drop-hint {{ color:#9aa3ad; font-size:8.5pt; margin:.8mm 0; }}
@@ -476,9 +481,14 @@ class ResumeRenderer:
                 + "</p>"
                 if education.courses else ""
             )
+            # 校徽式文字徽章：学校名称首字（真实校徽图片有版权，后续可支持上传替换）
+            badge_char = escape((education.school or "校")[:1])
             education_html.append(
-                f'<section class="education"><h3>{escape(education.school)}</h3>'
-                f'<p class="meta">{escape(meta)}</p>{detail_line}{courses}</section>'
+                f'<section class="education" data-school="{escape(education.school)}">'
+                f'<div class="edu-badge">{badge_char}</div>'
+                f'<div class="edu-body"><h3>{escape(education.school)}</h3>'
+                f'<p class="meta">{escape(meta)}</p>{detail_line}{courses}</div>'
+                f"</section>"
             )
         work, campus = self._zh_group(experiences)
         groups_html = []
@@ -538,7 +548,7 @@ class ResumeRenderer:
             f'<html lang="zh"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width, initial-scale=1">'
             f'<title>{escape(copy["title"])}</title><style>{css}</style></head>'
-            f"<body>{body}</body></html>"
+            f'<body data-template-version="2">{body}</body></html>'
         )
 
     def _markdown(

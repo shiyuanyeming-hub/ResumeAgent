@@ -529,21 +529,22 @@ def create_app(
         ]
         if not facts:
             return {"snippets": []}
-        texts = [value.text for value in facts]
+        text = "；".join(value.text for value in facts)
         if container.snippet_agent is not None:
             try:
-                generated = container.snippet_agent.write(experience, "\n".join(texts))
+                generated = container.snippet_agent.write(
+                    experience, "\n".join(value.text for value in facts)
+                )
                 if generated:
-                    texts = generated
+                    text = generated[0]
             except Exception:
-                pass  # 离线/失败时退化为事实原话卡
+                pass  # 离线/失败时退化为事实合并卡
         return {
             "snippets": [
                 {
                     "text": text,
                     "source_fact_ids": [str(value.id) for value in facts],
                 }
-                for text in texts
             ]
         }
 

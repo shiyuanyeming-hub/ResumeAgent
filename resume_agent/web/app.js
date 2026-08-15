@@ -1509,7 +1509,13 @@ async function renderFactBase(expectedGeneration = baseActivationGate.current())
     }
   }));
   if (!baseActivationGate.isCurrent(expectedGeneration) || currentBase?.id !== base.id) return;
+  const qualityById = {};
   base.experiences.forEach((experience, index) => {
+    qualityById[experience.id] = qualityReports[index];
+  });
+  const orderedExperiences = [...base.experiences].sort((a, b) =>
+    String(b.start || "").localeCompare(String(a.start || "")));
+  orderedExperiences.forEach((experience) => {
     const card = element("article", "experience-card");
     const header = element("div", "experience-card-header");
     header.append(element("h3", "", `${experience.organization} · ${experience.role}`));
@@ -1518,7 +1524,7 @@ async function renderFactBase(expectedGeneration = baseActivationGate.current())
     remove.addEventListener("click", () => confirmDeleteExperience(experience.id));
     header.append(remove);
     card.append(header);
-    const quality = qualityReports[index];
+    const quality = qualityById[experience.id] || null;
     card.append(element(
       "p",
       "quality-caption",

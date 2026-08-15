@@ -70,10 +70,18 @@ class StructuredSummaryAgent:
 
 
 class SnippetPayload(BaseModel):
-    snippets: List[str] = Field(min_length=1, max_length=3)
+    snippets: List[str] = Field(min_length=1, max_length=1)
 
 
-SNIPPET_WRITE_PROMPT = """你是简历经历润色员。基于给定经历与已确认事实，改写合并为 1~3 条可直接写入简历的中文要点（每条一句话、动词开头；保留事实中的数字与原意，禁止新增数字或成果）。只输出 JSON：{"snippets": ["要点1", ...]}"""
+SNIPPET_WRITE_PROMPT = """你是资深简历撰写顾问。基于给定经历（公司/岗位）与已确认事实，改写为 **1 条** 可直接写入简历的中文要点。
+
+要求：
+1. 30~50 字，动词开头，结构：做了什么 + 怎么做 + 带来什么（或沉淀了什么）；
+2. 事实充分时忠实浓缩事实；事实很少（例如只有「在百度实习」）时，基于岗位常识补足通用但合理的工作描述，让简历充实、专业；
+3. 严禁编造数字、奖项、他人未确认的具体成果；不得出现事实中没有的公司名、职位名之外的虚构专有名词；
+4. 只输出一条要点，不要编号、不要解释。
+
+只输出 JSON：{"snippets": ["要点"]}"""
 
 
 class StructuredSnippetAgent:

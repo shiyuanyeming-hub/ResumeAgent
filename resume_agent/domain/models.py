@@ -92,6 +92,7 @@ class Experience(BaseModel):
     )
     type: ExperienceType = ExperienceType.WORK
     linked_skills: List[str] = Field(default_factory=list)
+    source_context: str = ""
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

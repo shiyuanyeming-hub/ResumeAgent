@@ -46,6 +46,18 @@ def _default_get_json(request_url: str) -> object:
         return json.loads(response.read().decode("utf-8"))
 
 
+def _default_get_raw(request_url: str) -> str:
+    request = urllib.request.Request(
+        request_url,
+        headers={
+            "Accept": "application/vnd.github.raw+json",
+            "User-Agent": "ResumeAgent",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        return response.read().decode("utf-8", errors="replace")
+
+
 def _repo_item(data: dict) -> Dict[str, str]:
     return {
         "name": data.get("name", ""),
@@ -98,6 +110,27 @@ def fetch_repos(
         if item.get("full_name") and not item.get("archived")
     ]
     return repos[:6]
+
+
+def fetch_repo_context(
+    full_name: str,
+    get_json: Callable[[str], object] = _default_get_json,
+    get_raw: Optional[Callable[[str], str]] = None,
+) -> Dict[str, str]:
+    """抓取仓库描述、语言、主题与 README 摘要，作为经历的项目背景资料。"""
+    repo = get_json(f"{GITHUB_API}/repos/{full_name}")
+    readme_text = ""
+    raw_loader = get_raw or _default_get_raw
+    try:
+        readme_text = raw_loader(f"{GITHUB_API}/repos/{full_name}/readme")
+    except Exception:
+        readme_text = ""
+    return {
+        "description": (repo.get("description") or "").strip(),
+        "language": repo.get("language") or "",
+        "topics": "、".join(repo.get("topics") or []),
+        "readme": readme_text[:4000],
+    }
 
 
 def _http_error_message(error: urllib.error.HTTPError) -> str:

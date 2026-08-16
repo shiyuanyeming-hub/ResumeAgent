@@ -366,7 +366,7 @@ class InterviewService:
 
     @staticmethod
     def _experience_context(experience) -> str:
-        """给选项生成器提供更贴合经历的上下文（含已确认事实）。"""
+        """给选项生成器提供更贴合经历的上下文（含已确认事实与项目背景资料）。"""
         facts = "；".join(
             value.text
             for values in experience.statements.values()
@@ -377,4 +377,6 @@ class InterviewService:
             context += f"（{experience.start} 起）"
         if facts:
             context += f"；已确认事实：{facts}"
+        if experience.source_context:
+            context += f"；项目背景资料：{experience.source_context[:1600]}"
         return context

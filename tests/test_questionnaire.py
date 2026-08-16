@@ -836,6 +836,107 @@ def test_github_import_flow_for_project_experience():
     assert card.step_id == f"experience:{experience_id}:period"
 
 
+def test_github_project_pick_attaches_source_context():
+    """点选 GitHub 项目后，把 README/描述/语言等抓成项目背景资料。"""
+    def fake_fetcher(url):
+        return [{"full_name": "wangming/resume-tool", "description": "",
+                 "language": "Python", "stars": 9, "html_url": ""}]
+
+    def fake_context_fetcher(full_name):
+        assert full_name == "wangming/resume-tool"
+        return {
+            "description": "智能简历生成器",
+            "language": "Python",
+            "topics": "resume、llm",
+            "readme": "# ResumeAgent\n\n基于大模型的简历生成工具。",
+        }
+
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(), QuestionnaireEngine(),
+        github_fetcher=fake_fetcher,
+        github_context_fetcher=fake_context_fetcher,
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="后端工程师")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    card = questionnaire.next_card(base.id)
+    project_label = next(
+        label for label in card.options
+        if "项目" in label or "开发" in label
+    )
+    questionnaire.answer(base.id, "experience:add", value=project_label)
+    loaded = questionnaire.fact_bases.get(base.id)
+    experience_id = loaded.experiences[0].id
+    questionnaire.answer(
+        base.id, f"experience:{experience_id}:github",
+        value="https://github.com/wangming",
+    )
+    questionnaire.answer(
+        base.id, f"experience:{experience_id}:project_pick",
+        value="wangming/resume-tool",
+    )
+    loaded = questionnaire.fact_bases.get(base.id)
+    experience = loaded.experiences[0]
+    assert experience.organization == "wangming/resume-tool"
+    assert "项目简介：智能简历生成器" in experience.source_context
+    assert "主要语言：Python" in experience.source_context
+    assert "主题：resume、llm" in experience.source_context
+    assert "README 摘要：# ResumeAgent" in experience.source_context
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == f"experience:{experience_id}:period"
+
+
+def test_github_context_fetch_failure_keeps_flow_alive():
+    """背景资料抓取失败不影响点选流程，source_context 留空。"""
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(), QuestionnaireEngine(),
+        github_fetcher=lambda url: [
+            {"full_name": "wangming/resume-tool", "description": "",
+             "language": "Python", "stars": 9, "html_url": ""},
+        ],
+        github_context_fetcher=lambda full_name: (_ for _ in ()).throw(
+            RuntimeError("network down")),
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="后端工程师")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    card = questionnaire.next_card(base.id)
+    project_label = next(
+        label for label in card.options
+        if "项目" in label or "开发" in label
+    )
+    questionnaire.answer(base.id, "experience:add", value=project_label)
+    loaded = questionnaire.fact_bases.get(base.id)
+    experience_id = loaded.experiences[0].id
+    questionnaire.answer(
+        base.id, f"experience:{experience_id}:github",
+        value="https://github.com/wangming",
+    )
+    questionnaire.answer(
+        base.id, f"experience:{experience_id}:project_pick",
+        value="wangming/resume-tool",
+    )
+    loaded = questionnaire.fact_bases.get(base.id)
+    assert loaded.experiences[0].organization == "wangming/resume-tool"
+    assert loaded.experiences[0].source_context == ""
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == f"experience:{experience_id}:period"
+
+
 def test_github_step_skip_falls_back_to_manual_name():
     fact_bases = FactBaseService(InMemoryFactBaseRepository())
     base = fact_bases.create()

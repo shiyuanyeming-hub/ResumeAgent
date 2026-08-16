@@ -73,7 +73,10 @@ from resume_agent.domain.models import (
     utc_now,
 )
 from resume_agent.domain.quality import QualityReport, evaluate_experience
-from resume_agent.infrastructure.github_client import fetch_repos as fetch_github_repos
+from resume_agent.infrastructure.github_client import (
+    fetch_repo_context,
+    fetch_repos as fetch_github_repos,
+)
 from resume_agent.infrastructure.photo_store import (
     MAX_PHOTO_BYTES,
     PhotoStore,
@@ -133,6 +136,7 @@ def create_app(
     followup_advisor=None,
     access_code: Optional[str] = None,
     github_fetcher=None,
+    github_context_fetcher=None,
 ) -> FastAPI:
     # 可选访问口令：设置了 ACCESS_CODE 后，所有页面需要输入口令（打开即用 = 不设置）
     access_code = (
@@ -182,6 +186,7 @@ def create_app(
         skill_advisor=skill_advisor,
         guide=mentor_guide,
         github_fetcher=github_fetcher or fetch_github_repos,
+        github_context_fetcher=github_context_fetcher or fetch_repo_context,
     )
     container = ServiceContainer(
         store=store,

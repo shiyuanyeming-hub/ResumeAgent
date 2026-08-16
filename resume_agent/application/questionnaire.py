@@ -439,6 +439,7 @@ class QuestionnaireService:
         skill_advisor=None,
         guide=None,
         github_fetcher=None,
+        github_context_fetcher=None,
     ):
         self.fact_bases = fact_bases
         self.repository = repository
@@ -447,6 +448,7 @@ class QuestionnaireService:
         self.skill_advisor = skill_advisor
         self.guide = guide
         self.github_fetcher = github_fetcher
+        self.github_context_fetcher = github_context_fetcher
 
     def _state(self, fact_base_id):
         try:
@@ -763,6 +765,7 @@ class QuestionnaireService:
             if not value:
                 raise ValueError("请选择或填写项目名")
             experience.organization = value
+            self._attach_github_context(experience, value)
         elif field == "role":
             if not value:
                 raise ValueError("角色不能为空")
@@ -776,6 +779,25 @@ class QuestionnaireService:
             raise ValueError(f"unknown experience step: {step_id}")
         experience.updated_at = utc_now()
         return self._bump(base)
+
+    def _attach_github_context(self, experience, full_name):
+        """抓取所选 GitHub 仓库的描述/语言/主题/README，作为项目背景资料。"""
+        if self.github_context_fetcher is None or "/" not in full_name:
+            return
+        try:
+            context = self.github_context_fetcher(full_name)
+        except Exception:
+            return  # 背景资料是加分项，失败不影响流程
+        parts = []
+        if context.get("description"):
+            parts.append(f"项目简介：{context['description']}")
+        if context.get("language"):
+            parts.append(f"主要语言：{context['language']}")
+        if context.get("topics"):
+            parts.append(f"主题：{context['topics']}")
+        if context.get("readme"):
+            parts.append(f"README 摘要：{context['readme']}")
+        experience.source_context = "\n".join(parts)
 
     def _answer_github(self, base, state, value, experience):
         """读取 GitHub 链接 → 缓存候选项目，供下一步点选。"""

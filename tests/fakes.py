@@ -30,6 +30,14 @@ class InMemoryFactBaseRepository:
             raise ValueError("revision conflict")
         self.items[base.id] = deepcopy(base)
 
+    def list(self):
+        return [deepcopy(base) for base in self.items.values()]
+
+    def delete(self, fact_base_id: UUID) -> None:
+        if fact_base_id not in self.items:
+            raise KeyError(f"fact base not found: {fact_base_id}")
+        del self.items[fact_base_id]
+
 
 class InMemorySessionRepository:
     def __init__(self, sessions: Iterable[InterviewSession] = ()):

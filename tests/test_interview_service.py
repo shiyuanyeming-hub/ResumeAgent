@@ -345,3 +345,46 @@ def test_regenerate_options_requires_current_question():
         assert "没有等待回答的问题" in str(error)
     else:
         raise AssertionError("无当前问题时应拒绝换一批")
+
+
+def test_regenerate_options_without_guide_seeds_and_rotates_pool():
+    service, session, bases, sessions, experience = make_interview()
+    first = service.next_question(session.id)
+    assert first is not None
+
+    second = service.regenerate_options(session.id)
+
+    assert second is not None
+    assert len(second.options) >= 4
+    # 第二轮与第一轮不重复（首轮无选项时，从离线池给出全新一批）
+    assert set(second.options).isdisjoint(first.options)
+
+    third = service.regenerate_options(session.id)
+    assert set(third.options).isdisjoint(second.options)
+
+
+def test_regenerate_options_with_guide_keeps_new_options():
+    from resume_agent.application.mentor_guide import MentorGuideService
+
+    class FreshAdvisor:
+        def __init__(self):
+            self.calls = 0
+
+        def options(self, role, text, dimension, previous=None):
+            self.calls += 1
+            if self.calls == 1:
+                return ["旧选项一", "旧选项二", "旧选项三"]
+            return ["全新选项一", "全新选项二", "全新选项三"]
+
+    advisor = FreshAdvisor()
+    service, session, bases, sessions, experience = make_interview()
+    service.guide = MentorGuideService(followup_advisor=advisor)
+    first = service.next_question(session.id)
+    assert first is not None
+    assert first.options[:3] == ["旧选项一", "旧选项二", "旧选项三"]
+
+    second = service.regenerate_options(session.id)
+
+    assert second is not None
+    assert second.options[:3] == ["全新选项一", "全新选项二", "全新选项三"]
+    assert len(second.options) >= 4

@@ -129,11 +129,22 @@
       </form>
     </dialog>
 
+    <dialog id="confirm-dialog" class="confirm-dialog">
+      <form method="dialog">
+        <h2 id="confirm-dialog-title">确认删除</h2>
+        <p id="confirm-dialog-message"></p>
+        <div class="dialog-actions">
+          <button value="cancel" class="text-button">取消</button>
+          <button value="ok" class="danger-solid">删除</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="question-dialog" class="question-dialog">
       <div id="question-dialog-body"></div>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script type="module" src="/assets/app.js?v=20250815-21"></script>
+    <script type="module" src="/assets/app.js?v=20250815-22"></script>
   </body>
 </html>

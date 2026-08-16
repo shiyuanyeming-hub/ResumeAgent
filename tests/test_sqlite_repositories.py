@@ -150,3 +150,38 @@ def test_questionnaire_state_roundtrip(tmp_path):
     assert loaded.edited_education_id == state.edited_education_id
     assert loaded.edited_experience_id == state.edited_experience_id
     assert loaded.updated_at == state.updated_at
+
+
+def test_deleting_fact_base_cascades_sessions_versions_questionnaires(tmp_path):
+    store = SQLiteStore(tmp_path / "resume-agent.db")
+    bases = SQLiteFactBaseRepository(store)
+    sessions = SQLiteSessionRepository(store)
+    versions = SQLiteVersionRepository(store)
+    questionnaires = SQLiteQuestionnaireRepository(store)
+    base = CareerFactBase()
+    other = CareerFactBase()
+    bases.create(base)
+    bases.create(other)
+    session = InterviewSession(fact_base_id=base.id)
+    sessions.create(session)
+    version = ResumeVersion(name="Analyst", fact_base_id=base.id, base_revision=0)
+    versions.save(version)
+    state = QuestionnaireState(fact_base_id=base.id)
+    questionnaires.save(state)
+
+    bases.delete(base.id)
+
+    with pytest.raises(KeyError):
+        bases.get(base.id)
+    assert sessions.list(base.id) == []
+    assert versions.list(base.id) == []
+    with pytest.raises(KeyError):
+        questionnaires.get(base.id)
+    # 其他档案不受影响
+    assert bases.get(other.id).id == other.id
+
+
+def test_deleting_missing_fact_base_raises(tmp_path):
+    repository = SQLiteFactBaseRepository(SQLiteStore(tmp_path / "resume-agent.db"))
+    with pytest.raises(KeyError):
+        repository.delete(uuid4())

@@ -130,6 +130,9 @@ export function createApi(fetchImpl = globalThis.fetch) {
       method: "POST",
       body: JSON.stringify({ target }),
     }),
+    deleteFactBase: (factBaseId) => request(`/fact-bases/${factBaseId}`, {
+      method: "DELETE",
+    }),
     addExperience: (factBaseId, payload) => request(
       `/fact-bases/${factBaseId}/experiences`,
       { method: "POST", body: JSON.stringify(payload) },

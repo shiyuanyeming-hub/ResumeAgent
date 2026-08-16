@@ -666,6 +666,22 @@ button{{width:100%;margin-top:12px;padding:10px;border:0;border-radius:8px;backg
     def get_fact_base(fact_base_id: UUID) -> CareerFactBase:
         return container.fact_bases.get(fact_base_id)
 
+    @app.delete(
+        "/fact-bases/{fact_base_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+        tags=["fact-bases"],
+    )
+    def delete_fact_base(fact_base_id: UUID) -> Response:
+        # 档案本身不存在时给出 404，而不是静默成功
+        container.fact_bases.get(fact_base_id)
+        photo = container.photo_store.find(fact_base_id)
+        if photo:
+            container.photo_store.delete(photo)
+        container.template_store.delete(f"{fact_base_id}.html")
+        container.template_store.delete(f"{fact_base_id}.pdf")
+        container.fact_bases.delete(fact_base_id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     @app.post(
         "/fact-bases/{fact_base_id}/experiences",
         response_model=CareerFactBase,

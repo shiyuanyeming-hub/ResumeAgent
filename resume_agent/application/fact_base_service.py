@@ -29,6 +29,9 @@ class FactBaseService:
     def list(self) -> List[CareerFactBase]:
         return self.repository.list()
 
+    def delete(self, fact_base_id: UUID) -> None:
+        self.repository.delete(fact_base_id)
+
     def add_experience(
         self,
         fact_base_id: UUID,

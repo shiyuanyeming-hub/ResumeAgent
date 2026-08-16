@@ -148,6 +148,29 @@ class SQLiteFactBaseRepository:
                 f"fact base revision conflict: {base.id} expected {expected_revision}"
             )
 
+    def delete(self, fact_base_id: UUID) -> None:
+        """删除档案及其访谈会话、简历版本、问卷状态（同一事务）。"""
+        with self.store.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "DELETE FROM interview_sessions WHERE fact_base_id = ?",
+                (str(fact_base_id),),
+            )
+            connection.execute(
+                "DELETE FROM resume_versions WHERE fact_base_id = ?",
+                (str(fact_base_id),),
+            )
+            connection.execute(
+                "DELETE FROM questionnaires WHERE fact_base_id = ?",
+                (str(fact_base_id),),
+            )
+            cursor = connection.execute(
+                "DELETE FROM fact_bases WHERE id = ?",
+                (str(fact_base_id),),
+            )
+        if cursor.rowcount != 1:
+            raise KeyError(f"fact base not found: {fact_base_id}")
+
 
 class SQLiteSessionRepository:
     def __init__(self, store: SQLiteStore) -> None:

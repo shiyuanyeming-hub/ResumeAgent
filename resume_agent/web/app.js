@@ -2274,6 +2274,62 @@ function toolExportLink(label, format, prerequisiteId) {
   return link;
 }
 
+function confirmDialog(title, message, okLabel = "删除") {
+  return new Promise((resolve) => {
+    const dialog = byId("confirm-dialog");
+    byId("confirm-dialog-title").textContent = title;
+    byId("confirm-dialog-message").textContent = message;
+    const ok = dialog.querySelector('button[value="ok"]');
+    ok.textContent = okLabel;
+    dialog.addEventListener("close", function onClose() {
+      dialog.removeEventListener("close", onClose);
+      resolve(dialog.returnValue === "ok");
+    });
+    dialog.showModal();
+  });
+}
+
+async function deleteArchive(base) {
+  const role = base.target?.role?.trim() || "未命名岗位";
+  const name = base.profile?.name?.trim();
+  const label = `${role}${name ? ` · ${name}` : ""}`;
+  const isCurrent = base.id === currentBase?.id;
+  const confirmed = await confirmDialog(
+    "删除档案",
+    isCurrent
+      ? `「${label}」是当前正在使用的档案。删除后，它的访谈记录、简历版本、上传的照片与模板都会一并清除，且无法恢复。确认删除？`
+      : `删除「${label}」后，它的访谈记录、简历版本、上传的照片与模板都会一并清除，且无法恢复。确认删除？`,
+  );
+  if (!confirmed) return;
+  try {
+    await api.deleteFactBase(base.id);
+    bases = bases.filter((item) => item.id !== base.id);
+    renderBaseSwitcher();
+    if (isCurrent) {
+      currentBase = null;
+      currentSession = null;
+      currentExperienceQuality = null;
+      versions = [];
+      currentVersion = null;
+      state.factBaseId = "";
+      saveState();
+      const next = [...bases].sort((a, b) => String(b.updated_at || "")
+        .localeCompare(String(a.updated_at || "")))[0] || null;
+      if (next) {
+        await activateBase(next);
+      } else {
+        renderOnboarding();
+      }
+    } else {
+      renderToolsTab();
+    }
+    showToast("档案已删除");
+  } catch (error) {
+    showToast(error instanceof ApiError ? error.message : "档案删除失败");
+    renderToolsTab();
+  }
+}
+
 function renderToolsTab() {
   const root = byId("tools-content");
   root.className = "tools-content";
@@ -2287,6 +2343,36 @@ function renderToolsTab() {
       : "导师当前离线，事实库、版本与导出仍可使用。"),
   );
   root.append(service);
+
+  const archives = element("section", "tool-card");
+  archives.append(
+    element("h3", "", "档案管理"),
+    element("p", "", "删除不再需要的档案，避免存档越积越多。删除会连同访谈记录、简历版本与上传的文件一起清除。"),
+  );
+  const archiveList = element("div", "archive-list");
+  const orderedBases = [...bases].sort((a, b) => String(b.updated_at || "")
+    .localeCompare(String(a.updated_at || "")));
+  for (const base of orderedBases) {
+    const row = element("div", "archive-row");
+    const role = base.target?.role?.trim() || "未命名岗位";
+    const name = base.profile?.name?.trim();
+    const info = element("div", "archive-info");
+    info.append(
+      element("strong", "", `${role}${name ? ` · ${name}` : ""}`),
+      element(
+        "span", "archive-meta",
+        `教育${(base.educations || []).length} · 经历${(base.experiences || []).length}`
+        + (base.id === currentBase?.id ? " · 当前档案" : ""),
+      ),
+    );
+    const del = element("button", "text-button danger-text", "删除档案");
+    del.type = "button";
+    del.addEventListener("click", () => deleteArchive(base));
+    row.append(info, del);
+    archiveList.append(row);
+  }
+  archives.append(archiveList);
+  root.append(archives);
 
   const photo = element("section", "tool-card");
   photo.append(

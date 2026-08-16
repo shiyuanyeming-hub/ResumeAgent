@@ -17,6 +17,24 @@ OFFLINE_FOLLOWUP_OPTIONS = {
     "evidence": ["有数字指标", "有交付物", "有他人反馈", "暂时没有"],
 }
 
+# 「换一批」轮换池：首 4 条与初始批次一致，其余用于换出全新选项
+OFFLINE_FOLLOWUP_POOLS = {
+    "role": ["项目负责人", "核心成员", "普通成员", "实习生",
+             "独立开发者", "技术组长", "产品共建人", "指导老师"],
+    "context": ["解决具体业务问题", "完成课程大作业", "社团活动需求", "竞赛题目",
+                "开源社区需求", "老师课题的子任务", "个人兴趣探索", "实习中的真实需求"],
+    "responsibility": ["独立负责一块", "协助团队完成", "主导整个项目",
+                      "负责核心模块", "负责测试验收", "负责文档与分享", "负责对外沟通", "参与方案设计"],
+    "action": ["搭建或开发", "调研分析", "策划执行", "沟通协调",
+               "数据清洗与统计", "写代码实现", "组织活动", "制作材料"],
+    "method": ["用专业软件", "用编程工具", "用分析框架", "手工流程",
+               "用大模型辅助", "用开源工具", "先小范围验证", "参考成熟方案"],
+    "result": ["效率提升", "用户增长", "成本降低", "获得认可",
+               "按时交付", "被实际采用", "通过验收", "获得奖项"],
+    "evidence": ["有数字指标", "有交付物", "有他人反馈", "暂时没有",
+                 "有链接可查", "有对比数据", "有截图记录", "有评价截图"],
+}
+
 # 按经历类型区分的岗位选项离线兜底（LLM 失败时使用）
 OFFLINE_ROLE_OPTIONS_BY_TYPE = {
     "internship": ["产品实习生", "运营实习生", "数据分析实习生", "市场实习生", "技术实习生"],
@@ -33,10 +51,36 @@ OFFLINE_EXPERIENCE_OPTIONS = [
     {"label": "校园经历", "type": "campus"},
 ]
 
+# 「换一批」补充池：与初始批次不重复的经历类型
+OFFLINE_EXPERIENCE_OPTIONS_EXTRA = [
+    {"label": "社团/学生会经历", "type": "campus"},
+    {"label": "竞赛经历", "type": "campus"},
+    {"label": "开源贡献", "type": "project"},
+    {"label": "自媒体/内容项目", "type": "project"},
+    {"label": "研究/实验室项目", "type": "project"},
+    {"label": "创业/副业项目", "type": "project"},
+]
+
 
 def offline_experience_options():
     """离线兜底：实习/工作 + 互联网类项目（Web、Agent 等）。"""
     return [dict(item) for item in OFFLINE_EXPERIENCE_OPTIONS]
+
+
+def _fresh_text_options(options, pool, previous, min_count=4):
+    """过滤上一批选项并用轮换池补足，保证「换一批」确实换出不同内容。"""
+    previous = [item for item in (previous or []) if item]
+    if not previous:
+        return list(options)
+    seen = set(previous)
+    fresh = [item for item in options if item not in seen]
+    for item in pool:
+        if len(fresh) >= min_count:
+            break
+        if item not in seen:
+            fresh.append(item)
+            seen.add(item)
+    return fresh if fresh else list(options)
 
 
 class MentorGuideService:
@@ -67,10 +111,26 @@ class MentorGuideService:
                 else:
                     options = self.experience_advisor.options(target_role)
                 if options:
-                    return options
+                    return self._fresh_experience_options(options, previous)
             except Exception:
                 pass
-        return offline_experience_options()
+        return self._fresh_experience_options(offline_experience_options(), previous)
+
+    @staticmethod
+    def _fresh_experience_options(options, previous):
+        previous_labels = {item for item in (previous or []) if item}
+        if not previous_labels:
+            return [dict(item) for item in options]
+        seen = set(previous_labels)
+        fresh = [dict(item) for item in options if item["label"] not in seen]
+        seen.update(item["label"] for item in fresh)
+        for extra in OFFLINE_EXPERIENCE_OPTIONS_EXTRA:
+            if len(fresh) >= 4:
+                break
+            if extra["label"] not in seen:
+                fresh.append(dict(extra))
+                seen.add(extra["label"])
+        return fresh if fresh else [dict(item) for item in options]
 
     def followup_options(self, target_role, experience_text, dimension, previous=None):
         if self.followup_advisor is not None:
@@ -84,7 +144,14 @@ class MentorGuideService:
                         target_role, experience_text, dimension
                     )
                 if options:
-                    return options
+                    pool = OFFLINE_FOLLOWUP_POOLS.get(
+                        dimension, OFFLINE_FOLLOWUP_OPTIONS.get(dimension, [])
+                    )
+                    return _fresh_text_options(options, pool, previous)
             except Exception:
                 pass
-        return list(OFFLINE_FOLLOWUP_OPTIONS.get(dimension, []))
+        pool = OFFLINE_FOLLOWUP_POOLS.get(
+            dimension, OFFLINE_FOLLOWUP_OPTIONS.get(dimension, [])
+        )
+        base_options = list(OFFLINE_FOLLOWUP_OPTIONS.get(dimension, []))
+        return _fresh_text_options(base_options, pool, previous)

@@ -91,7 +91,10 @@ def test_followup_options_passes_previous_to_advisor():
         previous=["AI产品实习生"],
     )
     assert seen["previous"] == ["AI产品实习生"]
-    assert result == ["新选项一", "新选项二"]
+    # 保留导师的新选项，并从轮换池补足到至少 4 条
+    assert result[:2] == ["新选项一", "新选项二"]
+    assert len(result) >= 4
+    assert "AI产品实习生" not in result
 
 
 def test_experience_options_passes_previous_to_advisor():
@@ -106,3 +109,54 @@ def test_experience_options_passes_previous_to_advisor():
     result = service.experience_options("产品经理", previous=["产品实习"])
     assert seen["previous"] == ["产品实习"]
     assert result[0]["label"] == "Agent 开发项目"
+
+
+def test_followup_options_regenerate_excludes_previous_batch():
+    """离线模式下「换一批」也必须换出不同的选项。"""
+    service = MentorGuideService()
+    first = service.followup_options("产品经理", "星河科技 · 实习生", "action")
+    second = service.followup_options(
+        "产品经理", "星河科技 · 实习生", "action", previous=first,
+    )
+    assert set(second).isdisjoint(first)
+    assert len(second) >= 4
+
+
+def test_followup_options_regenerate_with_failing_advisor_still_changes():
+    """LLM 失败降级离线时，「换一批」仍然给出不同批次。"""
+    service = MentorGuideService(followup_advisor=FailingAdvisor())
+    first = service.followup_options("产品经理", "星河科技 · 实习生", "evidence")
+    second = service.followup_options(
+        "产品经理", "星河科技 · 实习生", "evidence", previous=first,
+    )
+    assert set(second).isdisjoint(first)
+    assert len(second) >= 4
+
+
+def test_followup_options_filters_llm_repeats_of_previous_batch():
+    """LLM 若重复上一批选项，会被过滤并用轮换池补足。"""
+
+    class RepeatAdvisor:
+        def options(self, role, text, dimension, previous=None):
+            return ["负责需求调研", "推动项目落地"]
+
+    service = MentorGuideService(followup_advisor=RepeatAdvisor())
+    result = service.followup_options(
+        "产品经理", "星河科技 · 实习生", "action",
+        previous=["负责需求调研", "推动项目落地"],
+    )
+    assert "负责需求调研" not in result
+    assert "推动项目落地" not in result
+    assert len(result) >= 4
+
+
+def test_experience_options_regenerate_excludes_previous_labels():
+    service = MentorGuideService()
+    first = service.experience_options("产品经理")
+    first_labels = {item["label"] for item in first}
+    second = service.experience_options(
+        "产品经理", previous=sorted(first_labels),
+    )
+    second_labels = {item["label"] for item in second}
+    assert second_labels.isdisjoint(first_labels)
+    assert len(second) >= 4

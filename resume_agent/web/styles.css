@@ -492,3 +492,26 @@ button:active:not(:disabled) { transform: translateY(0); }
 }
 
 #preview-frame { border-radius: 4px; }
+
+/* —— 档案管理 —— */
+.archive-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.archive-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: linear-gradient(180deg, #fbfcfe, #f4f7fb);
+}
+.archive-row:hover { box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08); }
+.archive-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.archive-info strong { font-size: 14px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.archive-meta { font-size: 12px; color: var(--muted); }
+
+/* —— 确认弹窗 —— */
+.confirm-dialog { border: 1px solid var(--line); border-radius: 14px; min-width: min(420px, 88vw); padding: 20px 22px; }
+.confirm-dialog::backdrop { background: rgba(15, 23, 42, 0.45); }
+.confirm-dialog h2 { margin: 0 0 10px; font-size: 17px; }
+.confirm-dialog p { margin: 0; color: var(--muted); line-height: 1.6; }
+.danger-solid {
+  background: linear-gradient(135deg, #dc2626, #b91c1c); color: #fff;
+  border: none; border-radius: 8px; padding: 8px 16px; font-weight: 600; cursor: pointer;
+}
+.danger-solid:hover { filter: brightness(1.08); }

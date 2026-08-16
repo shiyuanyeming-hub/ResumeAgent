@@ -57,3 +57,42 @@ def test_unknown_fact_base_returns_404(tmp_path):
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]
+
+
+def test_delete_fact_base_removes_it_and_returns_204(tmp_path):
+    with make_client(tmp_path) as client:
+        base = client.post("/fact-bases", json={}).json()
+        deleted = client.delete(f"/fact-bases/{base['id']}")
+        fetched = client.get(f"/fact-bases/{base['id']}")
+        listed = client.get("/fact-bases")
+
+    assert deleted.status_code == 204
+    assert fetched.status_code == 404
+    assert base["id"] not in [item["id"] for item in listed.json()]
+
+
+def test_delete_unknown_fact_base_returns_404(tmp_path):
+    with make_client(tmp_path) as client:
+        response = client.delete(
+            "/fact-bases/00000000-0000-0000-0000-000000000000"
+        )
+
+    assert response.status_code == 404
+
+
+def test_delete_fact_base_cleans_up_files(tmp_path):
+    with make_client(tmp_path) as client:
+        base = client.post("/fact-bases", json={}).json()
+        base_id = base["id"]
+        photo = client.put(
+            f"/fact-bases/{base_id}/photo",
+            files={"photo": ("photo.png", b"\x89PNG\r\n\x1a\n" + b"0" * 64, "image/png")},
+        )
+        assert photo.status_code == 200
+
+        deleted = client.delete(f"/fact-bases/{base_id}")
+        photos_dir = tmp_path / "photos"
+
+    assert deleted.status_code == 204
+    assert photos_dir.is_dir()
+    assert not any(photos_dir.iterdir())

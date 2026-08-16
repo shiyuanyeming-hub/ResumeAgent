@@ -8,6 +8,10 @@ from pydantic import BaseModel, Field
 from resume_agent.agents.mentor import DeterministicQuestionWriter
 from resume_agent.agents.structured import AgentOutputError
 from resume_agent.agents.unavailable import AgentUnavailableError
+from resume_agent.application.mentor_guide import (
+    OFFLINE_FOLLOWUP_POOLS,
+    _fresh_text_options,
+)
 from resume_agent.application.ports import (
     FactAuditAgent,
     FactBaseRepository,
@@ -273,6 +277,17 @@ class InterviewService:
                 previous=list(question.options),
             )
             question.options = options
+            session.updated_at = utc_now()
+            self.sessions.save(session)
+        else:
+            # 无导师时用离线轮换池兜底，保证「换一批」也有新内容
+            dimension = question.dimension.value
+            pool = OFFLINE_FOLLOWUP_POOLS.get(dimension, [])
+            previous = list(question.options)
+            seed = list(question.options) if previous else pool[:4]
+            question.options = _fresh_text_options(
+                seed, pool, previous=previous or None,
+            )
             session.updated_at = utc_now()
             self.sessions.save(session)
         return question

@@ -434,6 +434,10 @@ def test_project_experience_asks_name_only_without_role():
     base.experiences.append(experience)
     state = QuestionnaireState(fact_base_id=base.id)
     state.skipped = ["education:add"]
+    # 先问 GitHub 链接（可跳过），跳过后才问项目名
+    card = engine.next_card(base, state)
+    assert card.step_id == f"experience:{experience.id}:github"
+    state.skipped.append(f"experience:{experience.id}:github")
     card = engine.next_card(base, state)
     assert card.step_id == f"experience:{experience.id}:organization"
     assert "项目" in card.prompt
@@ -653,6 +657,12 @@ def test_experience_name_card_deletable_for_mispick():
     state = QuestionnaireState(fact_base_id=base.id)
     state.skipped = ["education:add"]
     card = engine.next_card(base, state)
+    # 项目先问 GitHub 链接（可删），跳过后的项目名卡同样可删
+    assert card.step_id == f"experience:{experience.id}:github"
+    assert card.deletable is True
+    assert card.skippable is True
+    state.skipped.append(f"experience:{experience.id}:github")
+    card = engine.next_card(base, state)
     assert card.step_id == f"experience:{experience.id}:organization"
     assert card.deletable is True
     assert card.skippable is False
@@ -769,3 +779,92 @@ def test_skip_experience_more_completes_experience_section():
     questionnaire.skip(base.id, "experience:more")
     card = questionnaire.next_card(base.id)
     assert card.step_id == "skills:tags"
+
+
+def test_github_import_flow_for_project_experience():
+    """项目经历：先问 GitHub 链接 → 列候选 → 点选后写入项目名。"""
+    def fake_fetcher(url):
+        return [
+            {"full_name": "wangming/agent-demo", "description": "", "language": "Python", "stars": 3, "html_url": ""},
+            {"full_name": "wangming/resume-tool", "description": "", "language": "Python", "stars": 9, "html_url": ""},
+        ]
+
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(), QuestionnaireEngine(),
+        github_fetcher=fake_fetcher,
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="产品经理")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    # 选一个项目类经历
+    card = questionnaire.next_card(base.id)
+    project_label = next(
+        label for label in card.options
+        if "项目" in label or "开发" in label
+    )
+    questionnaire.answer(base.id, "experience:add", value=project_label)
+    loaded = questionnaire.fact_bases.get(base.id)
+    experience_id = loaded.experiences[0].id
+    assert loaded.experiences[0].type is ExperienceType.PROJECT
+
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == f"experience:{experience_id}:github"
+    assert card.skippable is True
+
+    questionnaire.answer(
+        base.id, f"experience:{experience_id}:github",
+        value="https://github.com/wangming",
+    )
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == f"experience:{experience_id}:project_pick"
+    assert card.options == ["wangming/agent-demo", "wangming/resume-tool"]
+
+    questionnaire.answer(
+        base.id, f"experience:{experience_id}:project_pick",
+        value="wangming/resume-tool",
+    )
+    loaded = questionnaire.fact_bases.get(base.id)
+    assert loaded.experiences[0].organization == "wangming/resume-tool"
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == f"experience:{experience_id}:period"
+
+
+def test_github_step_skip_falls_back_to_manual_name():
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(), QuestionnaireEngine(),
+        github_fetcher=lambda url: [],
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="产品经理")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    card = questionnaire.next_card(base.id)
+    questionnaire.answer(base.id, "experience:add", value=card.options[0])
+    loaded = questionnaire.fact_bases.get(base.id)
+    experience_id = loaded.experiences[0].id
+    if loaded.experiences[0].type is not ExperienceType.PROJECT:
+        # 直接构造项目经历场景
+        loaded.experiences[0].type = ExperienceType.PROJECT
+        loaded.experiences[0].organization = ""
+        questionnaire.fact_bases.save(loaded, expected_revision=loaded.revision)
+        loaded = questionnaire.fact_bases.get(base.id)
+    card = questionnaire.next_card(base.id)
+    github_step = f"experience:{experience_id}:github"
+    assert card.step_id == github_step
+    questionnaire.skip(base.id, github_step)
+    card = questionnaire.next_card(base.id)
+    assert card.step_id == f"experience:{experience_id}:organization"
+    assert "项目" in card.prompt

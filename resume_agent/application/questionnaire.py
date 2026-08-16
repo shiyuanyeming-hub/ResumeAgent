@@ -39,6 +39,7 @@ from resume_agent.application.mentor_guide import (
     OFFLINE_FOLLOWUP_OPTIONS,
     OFFLINE_ROLE_OPTIONS_BY_TYPE,
 )
+from resume_agent.infrastructure.github_client import GithubError
 
 
 class QuestionKind(str, Enum):
@@ -287,8 +288,31 @@ class QuestionnaireEngine:
         )
 
     def _experience_field_card(self, base, state, experience):
-        # 名称：实习/工作问公司，项目问项目名，校园问经历名
+        # 名称：实习/工作问公司，项目问项目名（支持 GitHub 导入），校园问经历名
         if not experience.organization and not self._skipped(state, f"experience:{experience.id}:organization"):
+            if experience.type is ExperienceType.PROJECT:
+                github_step = f"experience:{experience.id}:github"
+                pick_step = f"experience:{experience.id}:project_pick"
+                if (
+                    not self._skipped(state, github_step)
+                    and github_step not in state.answered
+                ):
+                    return self._card(
+                        github_step, "experience", QuestionKind.CHOICE_FREE,
+                        "你有 GitHub 链接吗？粘贴主页或仓库链接，我帮你列出项目（可跳过）",
+                        options=[], skippable=True,
+                        deletable=True,  # 误选项目类型时可直接删除整段
+                    )
+                repo_options = state.github_repo_options.get(
+                    str(experience.id), []
+                )
+                if repo_options and not self._skipped(state, pick_step):
+                    return self._card(
+                        pick_step, "experience", QuestionKind.CHOICE_FREE,
+                        "从 GitHub 上选一个项目（点选，或自己填）：",
+                        options=list(repo_options), skippable=True,
+                        deletable=True,
+                    )
             prompts = {
                 ExperienceType.PROJECT: "这个项目的名称是？",
                 ExperienceType.CAMPUS: "这段校园经历的名称是？",
@@ -414,6 +438,7 @@ class QuestionnaireService:
         course_advisor=None,
         skill_advisor=None,
         guide=None,
+        github_fetcher=None,
     ):
         self.fact_bases = fact_bases
         self.repository = repository
@@ -421,6 +446,7 @@ class QuestionnaireService:
         self.course_advisor = course_advisor
         self.skill_advisor = skill_advisor
         self.guide = guide
+        self.github_fetcher = github_fetcher
 
     def _state(self, fact_base_id):
         try:
@@ -731,6 +757,12 @@ class QuestionnaireService:
             if not value:
                 raise ValueError("组织名称不能为空")
             experience.organization = value
+        elif field == "github":
+            return self._answer_github(base, state, value, experience)
+        elif field == "project_pick":
+            if not value:
+                raise ValueError("请选择或填写项目名")
+            experience.organization = value
         elif field == "role":
             if not value:
                 raise ValueError("角色不能为空")
@@ -744,6 +776,23 @@ class QuestionnaireService:
             raise ValueError(f"unknown experience step: {step_id}")
         experience.updated_at = utc_now()
         return self._bump(base)
+
+    def _answer_github(self, base, state, value, experience):
+        """读取 GitHub 链接 → 缓存候选项目，供下一步点选。"""
+        if not value.strip():
+            raise ValueError("请粘贴 GitHub 链接，或点「跳过」")
+        if self.github_fetcher is None:
+            raise ValueError("当前环境未启用 GitHub 读取")
+        try:
+            repos = self.github_fetcher(value.strip())
+        except GithubError as error:
+            raise ValueError(str(error)) from error
+        if not repos:
+            raise ValueError("这个账号下没有公开项目，可以直接填写项目名")
+        state.github_repo_options[str(experience.id)] = [
+            repo["full_name"] for repo in repos
+        ]
+        return base
 
     def _answer_skills(self, base, values):
         base.profile.skills = [item.strip() for item in values if item.strip()]

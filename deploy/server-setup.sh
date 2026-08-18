@@ -13,6 +13,12 @@ set -euo pipefail
 REPO_URL="https://github.com/shiyuanyeming-hub/ResumeAgent.git"
 APP_DIR="${1:-$HOME/resumeagent}"
 
+# 0. 基础工具（Ubuntu/Debian 镜像常缺 git）
+if ! command -v git >/dev/null 2>&1; then
+  echo ">> 安装 git …"
+  sudo apt-get update && sudo apt-get install -y git
+fi
+
 # 1. Docker（Ubuntu/Debian）
 if ! command -v docker >/dev/null 2>&1; then
   echo ">> 未检测到 Docker，开始安装…"

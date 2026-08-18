@@ -67,13 +67,14 @@ if [ ! -f .env ]; then
   cp .env.example .env
   echo
   echo "=================================================="
-  echo "已生成 $APP_DIR/.env，请先编辑它："
-  echo "  vim $APP_DIR/.env"
+  echo "已生成 $APP_DIR/.env,请编辑它(用 nano,比 vim 简单):"
+  echo "  nano $APP_DIR/.env"
   echo
-  echo "  必填：LLM_API_KEY=<你的 DeepSeek Key>"
-  echo "  建议：ACCESS_CODE=<给访问者的口令>（不设则打开即用，但任何人都会消耗你的 API 余额）"
+  echo "  必填:LLM_API_KEY=<你的 DeepSeek Key>"
+  echo "  建议:ACCESS_CODE=<给访问者的口令>(不设则打开即用,但任何人都会消耗你的 API 余额)"
   echo
-  echo "填好保存后，重新执行本脚本即可完成部署。"
+  echo "  nano 操作:方向键移动光标 → 改内容 → Ctrl+O 回车保存 → Ctrl+X 退出"
+  echo "填好保存后,重新执行本脚本即可完成部署。"
   echo "=================================================="
   exit 0
 fi

@@ -749,10 +749,18 @@ function summaryGenerateCard() {
     "p", "question-prompt",
     "最后一步：生成自我评价备选，勾选 1~2 条写入简历；措辞可在预览编辑模式中微调。",
   ));
+  const actions = element("div", "question-actions");
   const button = element("button", "primary", "生成自我评价备选");
   button.type = "button";
   button.addEventListener("click", generateSummaryOptions);
-  article.append(button);
+  const close = element("button", "text-button", "先关闭，去右侧预览");
+  close.type = "button";
+  close.addEventListener("click", () => {
+    if (currentBase) dismissedCompletionBases.add(currentBase.id);
+    byId("question-dialog").close();
+  });
+  actions.append(button, close);
+  article.append(actions);
   return article;
 }
 
@@ -760,6 +768,11 @@ async function generateSummaryOptions() {
   if (!currentBase || !currentVersion || sessionTransitionGate.isTransitioning()) return;
   const versionId = currentVersion.id;
   const baseGeneration = baseActivationGate.current();
+  const button = byId("question-dialog-body").querySelector("button.primary");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "正在生成…";
+  }
   try {
     await api.generateSummaryOptions(versionId);
     if (!baseActivationGate.isCurrent(baseGeneration)) return;
@@ -771,7 +784,11 @@ async function generateSummaryOptions() {
     presentQuestionCard(questionnaireState?.next || null);
   } catch (error) {
     if (!baseActivationGate.isCurrent(baseGeneration)) return;
-    showToast(error instanceof ApiError ? error.message : "自我评价生成失败");
+    showToast(error instanceof ApiError ? error.message : "自我评价生成失败，可稍后再试");
+    if (button) {
+      button.disabled = false;
+      button.textContent = "生成自我评价备选";
+    }
   }
 }
 

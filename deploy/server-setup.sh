@@ -19,24 +19,46 @@ if ! command -v git >/dev/null 2>&1; then
   sudo apt-get update && sudo apt-get install -y git
 fi
 
-# 1. Docker（Ubuntu/Debian）
+# 1. Docker（优先阿里云镜像源，国内速度快；海外可换回 get.docker.com）
 if ! command -v docker >/dev/null 2>&1; then
-  echo ">> 未检测到 Docker，开始安装…"
-  curl -fsSL https://get.docker.com | sh
-  sudo systemctl enable --now docker || true
+  echo ">> 安装 Docker（阿里云镜像源）…"
+  sudo apt-get update
+  sudo apt-get install -y ca-certificates curl gnupg
+  sudo install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg \
+    | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  sudo chmod a+r /etc/apt/keyrings/docker.gpg
+  echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://mirrors.aliyun.com/docker-ce/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+    | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+  sudo apt-get update
+  sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+fi
+# Docker Hub 拉镜像加速（国内）
+if ! grep -q "registry-mirrors" /etc/docker/daemon.json 2>/dev/null; then
+  echo ">> 配置 Docker 镜像加速 …"
+  sudo mkdir -p /etc/docker
+  sudo tee /etc/docker/daemon.json >/dev/null <<'EOF'
+{
+  "registry-mirrors": ["https://docker.m.daocloud.io", "https://hub-mirror.c.163.com"]
+}
+EOF
+  sudo systemctl restart docker || true
 fi
 if ! docker compose version >/dev/null 2>&1; then
   echo "!! 未检测到 docker compose 插件，请先安装 docker-compose-plugin"
   exit 1
 fi
 
-# 2. 代码
+# 2. 代码（GitHub 直连失败时走镜像加速）
 if [ ! -d "$APP_DIR/.git" ]; then
   echo ">> 克隆代码到 $APP_DIR …"
-  git clone "$REPO_URL" "$APP_DIR"
+  git clone "$REPO_URL" "$APP_DIR" \
+    || git clone "https://mirror.ghproxy.com/$REPO_URL" "$APP_DIR" \
+    || { echo "!! 代码下载失败，请检查网络或稍后重试"; exit 1; }
 else
   echo ">> 更新代码（git pull）…"
-  git -C "$APP_DIR" pull
+  git -C "$APP_DIR" pull || git -C "$APP_DIR" pull || true
 fi
 cd "$APP_DIR"
 

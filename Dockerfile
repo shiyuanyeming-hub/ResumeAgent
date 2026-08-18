@@ -3,6 +3,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# 国内 pip 加速（阿里云镜像）；海外部署可去掉这行
+ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/ \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
 # 先拷贝源码再安装（pip install . 需要包文件在场）
 COPY pyproject.toml README.md ./
 COPY resume_agent ./resume_agent

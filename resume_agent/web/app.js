@@ -584,7 +584,7 @@ async function startMentorSession(event) {
     }
     await refreshQuestionnaire();
     renderConversation();
-    presentQuestionCard(questionnaireState?.next || null);
+    presentQuestionCard(questionnaireState?.next || null, true);
   } catch (error) {
     showToast(error instanceof ApiError ? error.message : "档案创建失败");
     submit.disabled = false;
@@ -678,7 +678,77 @@ function renderConversation() {
   setSessionTransitionUi();
 }
 
-const dismissedCompletionBases = new Set();
+const DISMISSED_KEY = "resumeagent.dismissedBases";
+
+function loadDismissedBases() {
+  try {
+    const value = JSON.parse(localStorage.getItem(DISMISSED_KEY) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistDismissedBases() {
+  try {
+    localStorage.setItem(
+      DISMISSED_KEY,
+      JSON.stringify([...dismissedCompletionBases, ...dismissedQuestionBases]),
+    );
+  } catch {
+    // localStorage 不可用时忽略（关闭仍生效，仅刷新后不记忆）
+  }
+}
+
+const dismissedCompletionBases = new Set(loadDismissedBases());
+const dismissedQuestionBases = new Set(loadDismissedBases());
+
+const resumeFlowButton = byId("resume-flow-button");
+
+function hideResumeButton() {
+  if (resumeFlowButton) resumeFlowButton.hidden = true;
+}
+
+function showResumeButton() {
+  if (resumeFlowButton && currentBase) resumeFlowButton.hidden = false;
+}
+
+function updateResumeButton() {
+  const hasPending = Boolean(currentBase) && Boolean(
+    questionnaireState?.next
+    || (currentSession && (
+      currentSession.current_question
+      || Object.values(currentSession.pending_proposals || {}).length > 0
+    ))
+  );
+  if (hasPending) showResumeButton();
+  else hideResumeButton();
+}
+
+function resumeFlow() {
+  if (!currentBase) return;
+  if (questionnaireState?.next) {
+    presentQuestionCard(questionnaireState.next, true);
+    return;
+  }
+  if (currentSession) {
+    const pending = Object.values(currentSession.pending_proposals || {});
+    if (pending.length) {
+      showDialogCard(interviewProposalCard(pending.at(-1)));
+      return;
+    }
+    if (currentSession.current_question) {
+      showDialogCard(interviewQuestionCard(currentSession.current_question));
+      return;
+    }
+  }
+  const progress = questionnaireState?.progress || [];
+  if (progress.length && progress.every((item) => item.done)) {
+    showCompletionCard(true);
+    return;
+  }
+  showToast("暂时没有待继续的问题");
+}
 
 function sectionNavElement() {
   const nav = element("nav", "section-nav");
@@ -693,7 +763,7 @@ function sectionNavElement() {
     chip.type = "button";
     chip.title = item.done ? "已完成" : "待完善";
     chip.addEventListener("click", () => {
-      if (questionnaireState?.next) presentQuestionCard(questionnaireState.next);
+      if (questionnaireState?.next) presentQuestionCard(questionnaireState.next, true);
       else showCompletionCard(true);
     });
     nav.append(chip);
@@ -719,6 +789,7 @@ function showCompletionCard(force = false) {
   close.type = "button";
   close.addEventListener("click", () => {
     dismissedCompletionBases.add(baseId);
+    persistDismissedBases();
     dialog.close();
   });
   actions.append(close);
@@ -727,16 +798,24 @@ function showCompletionCard(force = false) {
   if (!dialog.open) dialog.showModal();
 }
 
-function presentQuestionCard(card) {
+function presentQuestionCard(card, force = false) {
   const dialog = byId("question-dialog");
   const body = byId("question-dialog-body");
   if (card) {
+    // 用户曾主动关闭流程：不自动重新弹窗，只在右下角显示「继续填写」
+    if (!force && currentBase && dismissedQuestionBases.has(currentBase.id)) {
+      showResumeButton();
+      return;
+    }
+    dismissedQuestionBases.delete(currentBase?.id || "");
+    persistDismissedBases();
     if (card.kind === "interview") {
       presentInterviewFlow(card);
       return;
     }
     body.replaceChildren(renderQuestionCard(card));
     if (!dialog.open) dialog.showModal();
+    hideResumeButton();
     return;
   }
   const progress = questionnaireState?.progress || [];
@@ -753,6 +832,7 @@ function presentQuestionCard(card) {
   if (summary && !summary.done && currentVersion) {
     body.replaceChildren(summaryGenerateCard());
     if (!dialog.open) dialog.showModal();
+    hideResumeButton();
     return;
   }
   if (dialog.open) dialog.close();
@@ -771,7 +851,10 @@ function summaryGenerateCard() {
   const close = element("button", "text-button", "先关闭，去右侧预览");
   close.type = "button";
   close.addEventListener("click", () => {
-    if (currentBase) dismissedCompletionBases.add(currentBase.id);
+    if (currentBase) {
+      dismissedCompletionBases.add(currentBase.id);
+      persistDismissedBases();
+    }
     byId("question-dialog").close();
   });
   actions.append(button, close);
@@ -1078,7 +1161,7 @@ function renderQuestionCard(card) {
         renderConversation();
         await renderFactBase();
         showToast("已删除这段误选的经历");
-        presentQuestionCard(questionnaireState?.next || null);
+        presentQuestionCard(questionnaireState?.next || null, true);
       } catch (error) {
         showToast(error instanceof ApiError ? error.message : "删除失败");
         remove.disabled = false;
@@ -1136,12 +1219,12 @@ async function answerQuestionCard(card, result) {
     await refreshQuestionnaire();
     await renderDocument();
     renderConversation();
-    presentQuestionCard(questionnaireState?.next || null);
+    presentQuestionCard(questionnaireState?.next || null, true);
   } catch (error) {
     if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
     showToast(error instanceof ApiError ? error.message : "回答保存失败");
     renderConversation();
-    presentQuestionCard(card);
+    presentQuestionCard(card, true);
   }
 }
 
@@ -1154,11 +1237,11 @@ async function skipQuestionCard(card) {
     if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
     await refreshQuestionnaire();
     renderConversation();
-    presentQuestionCard(questionnaireState?.next || null);
+    presentQuestionCard(questionnaireState?.next || null, true);
   } catch (error) {
     if (!baseActivationGate.isCurrent(baseGeneration) || currentBase?.id !== baseId) return;
     showToast(error instanceof ApiError ? error.message : "跳过失败");
-    presentQuestionCard(card);
+    presentQuestionCard(card, true);
   }
 }
 
@@ -1171,6 +1254,7 @@ function interviewExperienceId(card) {
 function showDialogCard(node) {
   const dialog = byId("question-dialog");
   byId("question-dialog-body").replaceChildren(node);
+  hideResumeButton();
   if (!dialog.open) dialog.showModal();
 }
 
@@ -1539,7 +1623,7 @@ async function finishInterviewFlow(experienceId) {
     showDialogCard(interviewDoneCard(next));
     return;
   }
-  presentQuestionCard(next);
+  presentQuestionCard(next, true);
 }
 
 async function finishInterviewNow() {
@@ -1563,7 +1647,7 @@ async function finishInterviewNow() {
       await refreshQuestionnaire();
     }
     renderConversation();
-    presentQuestionCard(questionnaireState?.next || null);
+    presentQuestionCard(questionnaireState?.next || null, true);
     showToast("访谈已结束，已确认的事实都会写入简历");
   } catch (error) {
     showToast(error instanceof ApiError ? error.message : "结束访谈失败");
@@ -1824,7 +1908,7 @@ function showAddExperienceForm() {
       await renderFactBase();
       dialog.close();
       showToast("经历已添加");
-      presentQuestionCard(questionnaireState?.next || null);
+      presentQuestionCard(questionnaireState?.next || null, true);
     } catch (error) {
       showToast(error instanceof ApiError ? error.message : "添加经历失败");
       submit.disabled = false;
@@ -2713,14 +2797,31 @@ byId("primary-tabs").addEventListener("keydown", (event) => {
   tabs[nextIndex].click();
 });
 byId("settings-button").addEventListener("click", () => byId("settings-dialog").showModal());
+// 随时退出流程：✕、点背景、Esc 都能关闭弹窗，进度保留，右下角出现「继续填写」
+byId("question-dialog-close").addEventListener("click", () => {
+  if (currentBase) {
+    dismissedQuestionBases.add(currentBase.id);
+    persistDismissedBases();
+  }
+  byId("question-dialog").close();
+});
 byId("question-dialog").addEventListener("click", (event) => {
-  // 点击弹窗背景关闭「完成/访谈完成」类卡片，避免模态挡住整个页面
+  // 点击弹窗背景即可关闭当前卡片（完成卡 / 问题卡 / 访谈卡都适用）
   if (event.target !== event.currentTarget) return;
-  const card = byId("question-dialog-body").querySelector(".complete-card");
-  if (!card) return;
-  if (currentBase) dismissedCompletionBases.add(currentBase.id);
+  const completeCard = byId("question-dialog-body").querySelector(".complete-card");
+  if (completeCard) {
+    if (currentBase) {
+      dismissedCompletionBases.add(currentBase.id);
+      persistDismissedBases();
+    }
+  } else if (currentBase) {
+    dismissedQuestionBases.add(currentBase.id);
+    persistDismissedBases();
+  }
   event.currentTarget.close();
 });
+byId("question-dialog").addEventListener("close", updateResumeButton);
+resumeFlowButton.addEventListener("click", resumeFlow);
 byId("base-select").addEventListener("change", async (event) => {
   const select = event.currentTarget;
   const base = bases.find((item) => item.id === select.value);

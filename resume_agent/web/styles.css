@@ -515,3 +515,26 @@ button:active:not(:disabled) { transform: translateY(0); }
   border: none; border-radius: 8px; padding: 8px 16px; font-weight: 600; cursor: pointer;
 }
 .danger-solid:hover { filter: brightness(1.08); }
+
+/* —— 弹窗关闭 + 继续填写 —— */
+.question-dialog { position: relative; }
+.dialog-close {
+  position: absolute; top: 10px; right: 10px;
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+  cursor: pointer; font-size: 13px; line-height: 1; z-index: 5;
+}
+.dialog-close:hover { background: #f1f5f9; color: var(--ink); }
+.resume-flow-button {
+  position: fixed; right: 22px; bottom: 22px; z-index: 60;
+  background: linear-gradient(135deg, var(--accent), #2b6a9e); color: #fff;
+  border: none; border-radius: 999px; padding: 12px 18px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 8px 22px rgba(31, 78, 121, 0.35);
+  animation: resume-pulse 2s ease-in-out infinite;
+}
+@keyframes resume-pulse {
+  0%, 100% { box-shadow: 0 8px 22px rgba(31, 78, 121, 0.35); }
+  50% { box-shadow: 0 8px 28px rgba(31, 78, 121, 0.6); }
+}
+.resume-flow-button:hover { filter: brightness(1.08); }

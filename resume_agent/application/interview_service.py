@@ -272,7 +272,9 @@ class InterviewService:
         if self.guide is not None:
             options = self.guide.followup_options(
                 base.target.role,
-                self._experience_context(experience),
+                self._experience_context(
+                    experience, (base.target.job_description or "").strip()
+                ),
                 question.dimension.value,
                 previous=list(question.options),
             )
@@ -368,7 +370,9 @@ class InterviewService:
         if self.guide is not None:
             options = self.guide.followup_options(
                 base.target.role,
-                self._experience_context(experience),
+                self._experience_context(
+                    experience, (base.target.job_description or "").strip()
+                ),
                 plan.dimension.value,
             )
         return MentorQuestion(
@@ -380,7 +384,7 @@ class InterviewService:
         )
 
     @staticmethod
-    def _experience_context(experience) -> str:
+    def _experience_context(experience, jd: str = "") -> str:
         """给选项生成器提供更贴合经历的上下文（含已确认事实与项目背景资料）。"""
         facts = "；".join(
             value.text
@@ -394,4 +398,7 @@ class InterviewService:
             context += f"；已确认事实：{facts}"
         if experience.source_context:
             context += f"；项目背景资料：{experience.source_context[:1600]}"
+        jd = (jd or "").strip()
+        if jd:
+            context += f"\n目标岗位 JD：{jd[:1200]}"
         return context

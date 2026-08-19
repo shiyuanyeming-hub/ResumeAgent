@@ -38,6 +38,7 @@ def create_default_app(environ: Optional[Mapping[str, str]] = None):
         job_advisor=runtime.job_advisor,
         experience_advisor=runtime.experience_advisor,
         followup_advisor=runtime.followup_advisor,
+        jd_advisor=runtime.jd_advisor,
     )
 
 

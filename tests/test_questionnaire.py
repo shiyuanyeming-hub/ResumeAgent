@@ -349,16 +349,19 @@ def test_experience_period_present_saves_empty_end():
 
 
 class FakeGuide:
-    def analyze_job(self, role):
+    def generate_jd(self, role, company=""):
+        return "岗位职责：负责数据分析与产品迭代。"
+
+    def analyze_job(self, role, jd=""):
         return ["岗位要点一", "岗位要点二"]
 
-    def experience_options(self, role):
+    def experience_options(self, role, previous=None, jd=""):
         return [
             {"label": "产品实习", "type": "internship"},
             {"label": "用户调研项目", "type": "project"},
         ]
 
-    def followup_options(self, role, text, dimension):
+    def followup_options(self, role, text, dimension, previous=None):
         return []
 
 
@@ -563,10 +566,13 @@ def test_regenerate_experience_options_passes_previous_and_updates_map():
     calls = {}
 
     class RegenerateGuide:
-        def analyze_job(self, role):
+        def generate_jd(self, role, company=""):
+            return "JD 文本"
+
+        def analyze_job(self, role, jd=""):
             return []
 
-        def experience_options(self, role, previous=None):
+        def experience_options(self, role, previous=None, jd=""):
             calls["previous"] = list(previous or [])
             return [
                 {"label": "Agent 开发项目", "type": "project"},
@@ -610,10 +616,13 @@ def test_regenerate_role_options_passes_previous():
     calls = []
 
     class RoleGuide:
-        def analyze_job(self, role):
+        def generate_jd(self, role, company=""):
+            return "JD 文本"
+
+        def analyze_job(self, role, jd=""):
             return []
 
-        def experience_options(self, role, previous=None):
+        def experience_options(self, role, previous=None, jd=""):
             return [{"label": "产品实习", "type": "internship"}]
 
         def followup_options(self, role, text, dimension, previous=None):
@@ -969,3 +978,65 @@ def test_github_step_skip_falls_back_to_manual_name():
     card = questionnaire.next_card(base.id)
     assert card.step_id == f"experience:{experience_id}:organization"
     assert "项目" in card.prompt
+
+
+def test_refresh_auto_generates_jd_when_missing():
+    """岗位已填但没贴 JD 时，自动生成岗位描述并让分析/选项结合 JD。"""
+    seen = {}
+
+    class JdGuide:
+        def generate_jd(self, role, company=""):
+            seen["company"] = company
+            return f"{role}的岗位描述：负责数据分析。"
+
+        def analyze_job(self, role, jd=""):
+            seen["analyze_jd"] = jd
+            return ["要点一"]
+
+        def experience_options(self, role, previous=None, jd=""):
+            seen["options_jd"] = jd
+            return [{"label": "数据分析项目", "type": "project"}]
+
+        def followup_options(self, role, text, dimension, previous=None):
+            return []
+
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(), QuestionnaireEngine(),
+        guide=JdGuide(),
+    )
+    questionnaire.answer(base.id, "profile:name", value="王明")
+    questionnaire.answer(base.id, "profile:email", value="wang@example.com")
+    questionnaire.answer(base.id, "profile:phone", value="13800000000")
+    questionnaire.skip(base.id, "profile:location")
+    questionnaire.skip(base.id, "profile:links")
+    questionnaire.answer(base.id, "target:role", value="数据分析师")
+    questionnaire.skip(base.id, "target:city")
+    questionnaire.skip(base.id, "education:add")
+    questionnaire.next_card(base.id)
+
+    loaded = questionnaire.fact_bases.get(base.id)
+    assert loaded.target.job_description == "数据分析师的岗位描述：负责数据分析。"
+    assert loaded.target.jd_source == "generated"
+    assert "数据分析师的岗位描述" in seen["analyze_jd"]
+    assert seen["options_jd"] == "数据分析师的岗位描述：负责数据分析。"
+
+
+def test_user_provided_jd_is_kept():
+    """用户粘贴了 JD 时，不再自动生成、也不覆盖。"""
+    fact_bases = FactBaseService(InMemoryFactBaseRepository())
+    base = fact_bases.create()
+    base.target.role = "产品经理"
+    base.target.job_description = "用户手写的 JD"
+    base.target.jd_source = "user"
+    fact_bases.save(base, expected_revision=0)
+    questionnaire = QuestionnaireService(
+        fact_bases, InMemoryQuestionnaireRepository(), QuestionnaireEngine(),
+        guide=FakeGuide(),
+    )
+    questionnaire.next_card(base.id)
+
+    loaded = questionnaire.fact_bases.get(base.id)
+    assert loaded.target.job_description == "用户手写的 JD"
+    assert loaded.target.jd_source == "user"

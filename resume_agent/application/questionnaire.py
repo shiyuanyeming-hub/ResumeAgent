@@ -458,17 +458,31 @@ class QuestionnaireService:
             self.repository.save(state)
             return state
 
+    def _ensure_jd(self, base):
+        """目标岗位已填但未提供 JD 时，根据岗位+公司自动生成岗位描述。"""
+        jd = (base.target.job_description or "").strip()
+        if jd or self.guide is None or not base.target.role.strip():
+            return jd
+        jd = self.guide.generate_jd(base.target.role, base.target.company)
+        if jd:
+            base.target.job_description = jd
+            base.target.jd_source = "generated"
+            self._bump(base)
+        return jd
+
     def _refresh_mentor_candidates(self, base, state):
         """按目标岗位惰性刷新岗位分析与经历类型选项（LLM 失败走离线模板）。"""
         changed = False
         role = base.target.role.strip()
         if self.guide is not None:
             if role and state.job_analysis_role != role:
-                state.job_analysis = self.guide.analyze_job(role)
+                jd = self._ensure_jd(base)
+                state.job_analysis = self.guide.analyze_job(role, jd)
                 state.job_analysis_role = role
                 changed = True
             if state.experience_options_role != role:
-                options = self.guide.experience_options(role)
+                jd = (base.target.job_description or "").strip()
+                options = self.guide.experience_options(role, jd=jd)
                 state.experience_type_map = {
                     item["label"]: item["type"] for item in options
                 }
@@ -574,9 +588,13 @@ class QuestionnaireService:
                 ExperienceType.WORK: "工作",
             }
             type_label = type_labels.get(experience.type, "实习")
+            context = f"{type_label}经历 · {experience.organization or type_label} · 担任岗位"
+            jd = (base.target.job_description or "").strip()
+            if jd:
+                context += f"\n目标岗位 JD：{jd[:1200]}"
             options = self.guide.followup_options(
                 role,
-                f"{type_label}经历 · {experience.organization or type_label} · 担任岗位",
+                context,
                 "role",
                 previous=previous,
             )

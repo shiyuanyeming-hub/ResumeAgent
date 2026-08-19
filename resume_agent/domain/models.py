@@ -154,6 +154,9 @@ class CareerTarget(BaseModel):
     industry: str = ""
     country: str = ""
     languages: List[str] = Field(default_factory=lambda: ["zh", "ja", "en"])
+    company: str = ""
+    job_description: str = ""
+    jd_source: str = ""  # "user"（用户粘贴）| "generated"（自动生成）
 
 
 class CandidateProfile(BaseModel):

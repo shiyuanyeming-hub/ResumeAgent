@@ -6,12 +6,12 @@ from resume_agent.application.mentor_guide import (
 
 
 class FakeJobAdvisor:
-    def analyze(self, target_role):
+    def analyze(self, target_role, jd=""):
         return [f"{target_role}看重A", f"{target_role}看重B"]
 
 
 class FakeExperienceAdvisor:
-    def options(self, target_role):
+    def options(self, target_role, previous=None, jd=""):
         return [
             {"label": "产品实习", "type": "internship"},
             {"label": "用户调研项目", "type": "project"},
@@ -19,15 +19,18 @@ class FakeExperienceAdvisor:
 
 
 class FakeFollowupAdvisor:
-    def options(self, target_role, experience_text, dimension):
+    def options(self, target_role, experience_text, dimension, previous=None):
         return ["选项一", "选项二"]
 
 
 class FailingAdvisor:
-    def analyze(self, target_role):
+    def analyze(self, target_role, jd=""):
         raise RuntimeError("boom")
 
     def options(self, *args):
+        raise RuntimeError("boom")
+
+    def run(self, *args):
         raise RuntimeError("boom")
 
 
@@ -101,7 +104,7 @@ def test_experience_options_passes_previous_to_advisor():
     seen = {}
 
     class Advisor:
-        def options(self, role, previous=None):
+        def options(self, role, previous=None, jd=""):
             seen["previous"] = previous
             return [{"label": "Agent 开发项目", "type": "project"}]
 
@@ -160,3 +163,47 @@ def test_experience_options_regenerate_excludes_previous_labels():
     second_labels = {item["label"] for item in second}
     assert second_labels.isdisjoint(first_labels)
     assert len(second) >= 4
+
+
+class FakeJdAdvisor:
+    def run(self, target_role, company=""):
+        return f"{target_role}@{company}的岗位描述"
+
+
+def test_generate_jd_uses_advisor_and_falls_back_offline():
+    service = MentorGuideService(jd_advisor=FakeJdAdvisor())
+    assert service.generate_jd("产品经理", "字节跳动") == "产品经理@字节跳动的岗位描述"
+    offline = MentorGuideService().generate_jd("产品经理")
+    assert "岗位职责" in offline and "任职要求" in offline
+
+
+def test_generate_jd_falls_back_when_advisor_fails():
+    service = MentorGuideService(jd_advisor=FailingAdvisor())
+    jd = service.generate_jd("产品经理")
+    assert "岗位职责" in jd
+
+
+def test_analyze_job_passes_jd_to_advisor():
+    seen = {}
+
+    class Advisor:
+        def analyze(self, target_role, jd=""):
+            seen["jd"] = jd
+            return ["要点一"]
+
+    service = MentorGuideService(job_advisor=Advisor())
+    service.analyze_job("产品经理", jd="JD内容")
+    assert seen["jd"] == "JD内容"
+
+
+def test_experience_options_passes_jd_to_advisor():
+    seen = {}
+
+    class Advisor:
+        def options(self, target_role, previous=None, jd=""):
+            seen["jd"] = jd
+            return [{"label": "数据项目", "type": "project"}]
+
+    service = MentorGuideService(experience_advisor=Advisor())
+    service.experience_options("产品经理", jd="JD内容")
+    assert seen["jd"] == "JD内容"

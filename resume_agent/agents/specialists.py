@@ -102,7 +102,11 @@ class JobAnalysisPayload(BaseModel):
     analysis: List[str] = Field(min_length=1, max_length=5)
 
 
-JOB_ANALYSIS_PROMPT = """你是资深求职导师。给定目标岗位，用中文输出 3~5 条该岗位最看重的经历与能力要点，每条一句话（不超过 30 字），用于引导用户准备简历。只输出 JSON：{"analysis": ["要点1", "要点2", ...]}"""
+JOB_ANALYSIS_PROMPT = """你是资深求职导师。给定目标岗位(可能附带岗位描述 JD),用中文输出 3~5 条该岗位最看重的经历与能力要点,每条一句话(不超过 30 字),用于引导用户准备简历。
+要求:
+1. 若提供了「岗位描述 JD」,要点必须围绕 JD 中的职责与要求展开(如 JD 要求数据分析能力,就突出相关经历与工具),禁止脱离 JD 的泛泛而谈;
+2. 未提供 JD 时,按该岗位的行业通用要求写。
+只输出 JSON：{"analysis": ["要点1", "要点2", ...]}"""
 
 
 class ExperienceOptionPayload(BaseModel):
@@ -114,7 +118,12 @@ class ExperienceOptionsPayload(BaseModel):
     options: List[ExperienceOptionPayload] = Field(min_length=1, max_length=6)
 
 
-EXPERIENCE_OPTIONS_PROMPT = """你是简历导师。给定目标岗位，生成 4~6 个候选「经历/项目类型」选项（中文短标签），帮助用户选出自己做过的事情。必须覆盖：岗位相关实习/工作，以及互联网类项目（如「Web 开发项目」「Agent / AI 开发项目」「小程序项目」「开源项目」「课程项目」等）。每个选项标注 type，只能取：internship（实习）、work（工作）、project（项目）、campus（校园）。只输出 JSON：{"options": [{"label": "...", "type": "internship"}, ...]}"""
+EXPERIENCE_OPTIONS_PROMPT = """你是简历导师。给定目标岗位(可能附带岗位描述 JD),生成 4~6 个候选「经历/项目类型」选项(中文短标签),帮助用户选出自己做过的事情。
+要求:
+1. 必须覆盖:岗位相关实习/工作,以及互联网类项目(如「Web 开发项目」「Agent / AI 开发项目」「小程序项目」「开源项目」「课程项目」等);
+2. 若提供了「岗位描述 JD」,选项应优先覆盖 JD 要求的经历方向(如 JD 强调数据分析,就给出「数据分析项目」「数据挖掘实习」这类选项);
+3. 每个选项标注 type,只能取:internship(实习)、work(工作)、project(项目)、campus(校园)。
+只输出 JSON：{"options": [{"label": "...", "type": "internship"}, ...]}"""
 
 
 class FollowUpOptionsPayload(BaseModel):
@@ -146,8 +155,10 @@ class StructuredJobAnalysisAgent:
     def __init__(self, runner) -> None:
         self.runner = runner
 
-    def analyze(self, target_role: str) -> List[str]:
+    def analyze(self, target_role: str, jd: str = "") -> List[str]:
         prompt = f"{JOB_ANALYSIS_PROMPT}\n目标岗位：{target_role}"
+        if jd:
+            prompt += f"\n岗位描述 JD：{jd[:1500]}"
         payload = run_structured(self.runner, prompt, JobAnalysisPayload)
         return [item.strip() for item in payload.analysis if item.strip()]
 
@@ -156,8 +167,15 @@ class StructuredExperienceOptionsAgent:
     def __init__(self, runner) -> None:
         self.runner = runner
 
-    def options(self, target_role: str, previous: list[str] | None = None) -> List[dict]:
+    def options(
+        self,
+        target_role: str,
+        previous: list[str] | None = None,
+        jd: str = "",
+    ) -> List[dict]:
         prompt = f"{EXPERIENCE_OPTIONS_PROMPT}\n目标岗位：{target_role}"
+        if jd:
+            prompt += f"\n岗位描述 JD：{jd[:1500]}"
         if previous:
             prompt += (
                 "\n\n注意：用户认为上一批选项都不合适（"
@@ -171,6 +189,31 @@ class StructuredExperienceOptionsAgent:
             for item in payload.options
             if item.label.strip() and item.type in ("internship", "work", "project", "campus")
         ]
+
+
+class JdPayload(BaseModel):
+    jd: str = Field(min_length=1)
+
+
+JD_WRITER_PROMPT = """你是资深招聘顾问。给定目标岗位与公司(可能为空),生成一份贴近真实招聘的岗位描述(JD),200~300 字中文。
+要求：
+1. 结构清晰：岗位职责 3~5 条 + 任职要求 3~5 条（含常见技能/工具）；
+2. 必须贴合岗位与行业，禁止「推动项目落地」这类任何岗位都能套的万能话术；
+3. 公司名称已知时，可结合该公司的常见业务方向写（如互联网大厂、金融、制造业）；公司未知或不确定时，按该岗位的行业通用 JD 写，不要编造具体公司业务；
+4. 这份 JD 将用于引导用户准备简历，尽量具体可对照。
+只输出 JSON：{"jd": "..."}"""
+
+
+class StructuredJdAgent:
+    def __init__(self, runner) -> None:
+        self.runner = runner
+
+    def run(self, target_role: str, company: str = "") -> str:
+        prompt = f"{JD_WRITER_PROMPT}\n目标岗位：{target_role}"
+        if company:
+            prompt += f"\n目标公司：{company}"
+        payload = run_structured(self.runner, prompt, JdPayload)
+        return payload.jd.strip()
 
 
 class StructuredFollowUpOptionsAgent:

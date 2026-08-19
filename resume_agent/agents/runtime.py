@@ -20,6 +20,7 @@ from resume_agent.agents.specialists import (
     COURSE_RECOMMEND_PROMPT,
     EXPERIENCE_OPTIONS_PROMPT,
     FOLLOWUP_OPTIONS_PROMPT,
+    JD_WRITER_PROMPT,
     JOB_ANALYSIS_PROMPT,
     SKILL_EXTRACT_PROMPT,
     SNIPPET_WRITE_PROMPT,
@@ -27,6 +28,7 @@ from resume_agent.agents.specialists import (
     StructuredCourseAgent,
     StructuredExperienceOptionsAgent,
     StructuredFollowUpOptionsAgent,
+    StructuredJdAgent,
     StructuredJobAnalysisAgent,
     StructuredSkillAgent,
     StructuredSnippetAgent,
@@ -160,6 +162,7 @@ class MentorRuntime:
     job_advisor: Optional[StructuredJobAnalysisAgent] = None
     experience_advisor: Optional[StructuredExperienceOptionsAgent] = None
     followup_advisor: Optional[StructuredFollowUpOptionsAgent] = None
+    jd_advisor: Optional[StructuredJdAgent] = None
 
 
 class FreshAgentRunner:
@@ -312,6 +315,14 @@ def build_mentor_runtime(
             config=_private_agent_config(framework),
         )
     )
+    jd_runner = FreshAgentRunner(
+        lambda: framework.SimpleAgent(
+            name="岗位描述生成",
+            llm=llm,
+            system_prompt=JD_WRITER_PROMPT,
+            config=_private_agent_config(framework),
+        )
+    )
     return MentorRuntime(
         fact_auditor=StructuredFactAuditAgent(audit_runner),
         question_writer=StructuredQuestionWriterAgent(question_runner),
@@ -322,5 +333,6 @@ def build_mentor_runtime(
         job_advisor=StructuredJobAnalysisAgent(job_runner),
         experience_advisor=StructuredExperienceOptionsAgent(experience_options_runner),
         followup_advisor=StructuredFollowUpOptionsAgent(followup_runner),
+        jd_advisor=StructuredJdAgent(jd_runner),
         capabilities=AgentCapabilityStatus.ready(settings.model),
     )

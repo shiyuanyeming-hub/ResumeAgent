@@ -134,6 +134,7 @@ def create_app(
     job_advisor=None,
     experience_advisor=None,
     followup_advisor=None,
+    jd_advisor=None,
     access_code: Optional[str] = None,
     github_fetcher=None,
     github_context_fetcher=None,
@@ -170,6 +171,7 @@ def create_app(
         job_advisor=job_advisor,
         experience_advisor=experience_advisor,
         followup_advisor=followup_advisor,
+        jd_advisor=jd_advisor,
     )
     questionnaire_service = QuestionnaireService(
         fact_base_service,

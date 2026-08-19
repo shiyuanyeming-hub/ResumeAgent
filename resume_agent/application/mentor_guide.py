@@ -61,6 +61,19 @@ OFFLINE_EXPERIENCE_OPTIONS_EXTRA = [
     {"label": "创业/副业项目", "type": "project"},
 ]
 
+# 用户未粘贴 JD 时的离线兜底岗位描述（LLM 失败时使用）
+OFFLINE_JD = """岗位职责：
+1. 负责与岗位相关的核心业务模块的推进与交付；
+2. 与产品、设计、研发等团队协作，完成需求分析与方案落地；
+3. 跟进数据与反馈，持续优化方案效果；
+4. 沉淀工作方法与文档，参与团队知识共享。
+
+任职要求：
+1. 相关专业背景，有对应岗位的实习或项目经验；
+2. 熟练使用岗位常用工具与技能；
+3. 逻辑清晰、沟通顺畅，能推动事情落地；
+4. 学习能力强，有自驱力。"""
+
 
 def offline_experience_options():
     """离线兜底：实习/工作 + 互联网类项目（Web、Agent 等）。"""
@@ -86,30 +99,48 @@ def _fresh_text_options(options, pool, previous, min_count=4):
 class MentorGuideService:
     """Job analysis and dynamic options; every LLM path has an offline fallback."""
 
-    def __init__(self, job_advisor=None, experience_advisor=None, followup_advisor=None):
+    def __init__(
+        self,
+        job_advisor=None,
+        experience_advisor=None,
+        followup_advisor=None,
+        jd_advisor=None,
+    ):
         self.job_advisor = job_advisor
         self.experience_advisor = experience_advisor
         self.followup_advisor = followup_advisor
+        self.jd_advisor = jd_advisor
 
-    def analyze_job(self, target_role):
+    def generate_jd(self, target_role, company=""):
+        """用户未提供 JD 时，根据岗位+公司生成岗位描述（失败走离线模板）。"""
+        if self.jd_advisor is not None:
+            try:
+                jd = self.jd_advisor.run(target_role, company)
+                if jd:
+                    return jd
+            except Exception:
+                pass
+        return OFFLINE_JD
+
+    def analyze_job(self, target_role, jd=""):
         if self.job_advisor is not None:
             try:
-                analysis = self.job_advisor.analyze(target_role)
+                analysis = self.job_advisor.analyze(target_role, jd)
                 if analysis:
                     return analysis
             except Exception:
                 pass  # 离线或失败降级为模板
         return list(OFFLINE_JOB_ANALYSIS)
 
-    def experience_options(self, target_role, previous=None):
+    def experience_options(self, target_role, previous=None, jd=""):
         if self.experience_advisor is not None:
             try:
                 if previous:
                     options = self.experience_advisor.options(
-                        target_role, previous=previous
+                        target_role, previous=previous, jd=jd
                     )
                 else:
-                    options = self.experience_advisor.options(target_role)
+                    options = self.experience_advisor.options(target_role, jd=jd)
                 if options:
                     return self._fresh_experience_options(options, previous)
             except Exception:

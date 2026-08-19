@@ -47,3 +47,16 @@ def test_experience_context_truncates_source_context():
     experience.source_context = "A" * 3000
     context = InterviewService._experience_context(experience)
     assert context.count("A") == 1600
+
+
+def test_experience_context_includes_target_jd():
+    experience = make_experience()
+    context = InterviewService._experience_context(experience, jd="负责数据仓库建设")
+    assert "目标岗位 JD：负责数据仓库建设" in context
+    assert "项目背景资料" not in context
+
+
+def test_experience_context_omits_empty_jd():
+    experience = make_experience()
+    context = InterviewService._experience_context(experience, jd="   ")
+    assert "目标岗位 JD" not in context

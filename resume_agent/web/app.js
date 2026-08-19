@@ -510,6 +510,15 @@ function showRoleForm() {
   const form = element("form", "onboarding-form");
   form.id = "onboarding-form";
   form.append(field("目标岗位", "role", "例如：产品经理"));
+  form.append(field("目标公司（选填）", "company", "例如：字节跳动 / 互联网大厂"));
+  const jdWrap = element("label", "form-field");
+  jdWrap.append(element("span", "", "岗位描述 JD（选填）"));
+  const jdArea = document.createElement("textarea");
+  jdArea.name = "jd";
+  jdArea.rows = 5;
+  jdArea.placeholder = "粘贴目标岗位的 JD……\n不填的话，我会根据「岗位 + 公司」自动生成岗位描述，后续的问题和选项都会结合它来问你。";
+  jdWrap.append(jdArea);
+  form.append(jdWrap);
   const submit = element("button", "primary", "开始，让导师来问我");
   submit.type = "submit";
   form.append(submit);
@@ -519,7 +528,10 @@ function showRoleForm() {
 
 async function startMentorSession(event) {
   event.preventDefault();
-  const role = String(new FormData(event.currentTarget).get("role") || "").trim();
+  const data = new FormData(event.currentTarget);
+  const role = String(data.get("role") || "").trim();
+  const company = String(data.get("company") || "").trim();
+  const jd = String(data.get("jd") || "").trim();
   if (!role) {
     showToast("请填写目标岗位");
     return;
@@ -529,6 +541,9 @@ async function startMentorSession(event) {
   try {
     const base = await api.createFactBase({
       role,
+      company,
+      job_description: jd,
+      jd_source: jd ? "user" : "",
       country: "",
       languages: ["zh", "ja", "en"],
     });
@@ -559,8 +574,8 @@ async function startMentorSession(event) {
       const version = await api.createVersion(base.id, {
         name: defaultZhVersionName(role),
         target_role: role,
-        company: "",
-        raw_jd: "",
+        company,
+        raw_jd: jd,
         locale: "zh",
         selected_experience_ids: [],
       });
